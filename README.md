@@ -698,6 +698,38 @@ This approach provides:
 
 ---
 
+### Post-Install Scripting Options: PKG Script vs. Jamf Pro Policy Script
+
+Repackaging the MAS application as a PKG is always required when post-install configuration is needed. Jamf Pro's MDM-based VPP/MAS app assignment has no script hooks — pre/post-install scripts are only supported in the context of a **Jamf Pro Policy**, and Policies require a standard PKG. The repackaging step is therefore a prerequisite for any scripting to occur.
+
+Once the application is repackaged and deployed via a Jamf Pro Policy, there are two places the post-install script can live. Both require the PKG; the difference is where the configuration logic executes.
+
+#### Option 1: Post-Install Script Embedded in the PKG
+
+The script is included as a `postinstall` payload inside the PKG itself, built with Jamf Composer, `pkgbuild`/`productbuild`, or `munkipkg`. It runs automatically whenever the PKG is installed, regardless of which Policy or mechanism delivers it.
+
+**Best for:** configuration that must always accompany the application payload — license acceptance, developer directory setup, or anything that must run before the app is usable.
+
+#### Option 2: Post-Install Script in the Jamf Pro Policy
+
+The PKG installs the application, and a separate script is added to the same Jamf Pro Policy as a script payload set to run **After** the package installation. The script executes as part of the same Policy run, after the PKG has finished.
+
+**Best for:** configuration that is environment-specific or may need to be updated independently of the PKG — shared library path setup, preference seeding, or organizational defaults that vary between deployment groups. Updating the script does not require rebuilding the PKG.
+
+#### Comparison
+
+| | PKG post-install script | Jamf Pro Policy script |
+|---|---|---|
+| Requires repackaging | Yes | Yes |
+| Runs on every install regardless of delivery method | Yes | No — only when delivered by the Policy containing the script |
+| Script updates require PKG rebuild | Yes | No — update the script in Jamf Pro independently |
+| Supports bundled file payloads alongside the script | Yes | No — script only |
+| Works with Patch Policies | Yes | Yes — add the script to the Policy backing the Patch Policy |
+
+> **Both options are fully compatible with Title Editor version tracking.** The PKG attaches to the version record in Jamf Pro Patch Management regardless of whether the post-install logic lives inside the PKG or in the Policy script payload. Title Editor provides the compliance dashboard and drives Patch Policy enforcement either way.
+
+---
+
 ### Final Cut Pro
 
 Final Cut Pro is the primary video editing application in the Marriott Library's Digital Scholarship Lab and media production facilities. It is a paid MAS title licensed through ABM/VPP and not available via Jamf Pro App Installers.
