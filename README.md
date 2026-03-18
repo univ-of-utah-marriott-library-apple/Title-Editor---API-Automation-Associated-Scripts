@@ -861,5 +861,3 @@ bash ~/title_editor/title_editor_menu.sh \
 | `TEM_AUTO_RESEQUENCE_ON_CHANGE` | Set to `false` to disable automatic patch resequencing after batch operations. |
 
 ---
-
-*Copyright © 2026 University of Utah, Marriott Library IT. All rights reserved. Scripts provided under the University of Utah open-source licence reproduced in each script header.*
