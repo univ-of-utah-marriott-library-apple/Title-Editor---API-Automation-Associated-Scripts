@@ -162,7 +162,10 @@ Title Editor exposes a comprehensive REST API. The Marriott Library IT team has 
 | `setup_title_editor_credentials.sh` | One-time credential wizard. Stores the Title Editor hostname, username, and password securely in the macOS Login Keychain under the service name `TitleEditorAPI`. |
 | `title_editor_menu.sh` | Interactive CLI menu and full non-interactive CLI. Browse titles, view patch version details, add versions individually or in batch, create new titles, export title JSON. |
 | `build_title_editor_batch_from_github.sh` | Queries a GitHub repository's releases or tags and generates a batch import file for bulk version history population. |
+| `build_title_editor_batch_from_jamf_patch_catalog.sh` | Pulls software version data from Jamf Patch sources and generates a Title Editor batch import file, including workflows helpful for subfolder app install path edge cases. |
 | `build_title_editor_batch_from_release_notes.sh` | Scrapes a vendor release-notes web page or the Mac App Store version history and generates a batch import file. |
+| `title_editor_software_title_defaults_from_user_prompt.sh` | Prompts for software title metadata defaults and helps standardize values used when creating/importing Title Editor records. |
+| `update_title_editor_versions.sh` | Wrapper orchestration script that checks sources, builds/imports batch updates, and tracks current-version state across managed titles. |
 
 ---
 
@@ -184,11 +187,11 @@ Title Editor exposes a comprehensive REST API. The Marriott Library IT team has 
 
 ### Script Placement
 
-Place all five scripts in a single working directory. The API library (`title_editor_api_ctrl.sh`) is located automatically if it is in the same directory as `title_editor_menu.sh`, in `$HOME`, or in `/usr/local/bin`.
+Place all toolkit scripts in a single working directory. The API library (`title_editor_api_ctrl.sh`) is located automatically if it is in the same directory as `title_editor_menu.sh`, in `$HOME`, or in `/usr/local/bin`.
 
 ```bash
 mkdir -p ~/title_editor
-# Copy all five scripts into ~/title_editor/
+# Copy all toolkit scripts into ~/title_editor/
 chmod +x ~/title_editor/*.sh
 ```
 
@@ -561,6 +564,55 @@ Use `--debug` for verbose HTML parsing output when a vendor changes page layout 
 
 ---
 
+### `build_title_editor_batch_from_jamf_patch_catalog.sh`
+
+Builds a Title Editor batch file from Jamf Patch catalog data (Jamf Pro API or exported patch XML), useful when Jamf patch metadata and live install-path detection need to be reconciled.
+
+```bash
+# Build from Jamf Pro patch title name
+bash ~/title_editor/build_title_editor_batch_from_jamf_patch_catalog.sh \
+  --source jamf-pro \
+  --software-name "Opera (Jamf)" \
+  --title-name "Opera" \
+  --output ~/title_editor/batches/opera_from_jamf.txt
+```
+
+- Supports credential sourcing from environment and/or Keychain.
+- Helpful for applications installed under subdirectories (for example `/Applications/Web Browsers`).
+
+---
+
+### `title_editor_software_title_defaults_from_user_prompt.sh`
+
+Prompts for common software-title defaults and outputs normalized values that can be reused when creating or updating Title Editor software title records.
+
+```bash
+bash ~/title_editor/title_editor_software_title_defaults_from_user_prompt.sh
+```
+
+Use this helper when standardizing title naming, bundle ID conventions, and publisher values before import or API create/update operations.
+
+---
+
+### `update_title_editor_versions.sh`
+
+Wrapper/orchestration script for repeatable version checks and updates across multiple software titles and source types (GitHub, release notes, Mac App Store, Jamf patch sources).
+
+```bash
+# Check one item (no import/state write)
+bash ~/title_editor/update_title_editor_versions.sh \
+  --item amphetamine \
+  --current-only \
+  --no-import \
+  --no-apply
+```
+
+- Supports one-item or all-item runs.
+- Maintains per-item/version state keys.
+- Integrates with existing batch builder scripts and Title Editor import flow.
+
+---
+
 ## Workflow: Title Editor with Jamf Pro Patch Management
 
 ### How a Title Editor Definition Drives Patch Management
@@ -901,8 +953,11 @@ bash ~/title_editor/title_editor_menu.sh \
 | Batch import | `bash title_editor_menu.sh --add-patch-batch --file batch.txt` |
 | Dry-run a batch | `bash title_editor_menu.sh --add-patch-batch --file batch.txt --dry-run` |
 | Build batch from GitHub | `bash build_title_editor_batch_from_github.sh --repo owner/repo --title-name "App" --output out.txt` |
+| Build batch from Jamf Patch catalog | `bash build_title_editor_batch_from_jamf_patch_catalog.sh --source jamf-pro --software-name "App (Jamf)" --title-name "App" --output out.txt` |
 | Build batch from release notes | `bash build_title_editor_batch_from_release_notes.sh --url https://... --title-name "App" --output out.txt` |
 | Build batch from Mac App Store | `bash build_title_editor_batch_from_release_notes.sh --mac-app-store --mac-app-store-name "Xcode" --title-name "Xcode" --output out.txt` |
+| Prompt software title defaults | `bash title_editor_software_title_defaults_from_user_prompt.sh` |
+| Run orchestrated version update | `bash update_title_editor_versions.sh --item <key> --current-only --no-import --no-apply` |
 | Export title to JSON | `bash title_editor_menu.sh --export-title-json --title-name "App" --output title.json` |
 | Resequence patches | `bash title_editor_menu.sh --resequence-only --title-name "App" --yes` |
 
