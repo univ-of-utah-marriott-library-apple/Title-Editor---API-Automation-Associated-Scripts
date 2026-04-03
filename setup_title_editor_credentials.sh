@@ -400,9 +400,9 @@ verify_mode() {
         log_error "Missing one or more Keychain entries for service '${KEYCHAIN_SERVICE}'."
         debug_keychain_presence
         log_info "Run setup to store credentials:"
-        log_info "  bash /Users/u0105821/git/gitlab/general-scripts/setup_title_editor_credentials.sh"
+        log_info "  bash ${SCRIPT_DIR}/setup_title_editor_credentials.sh"
         log_info "Or migrate existing entries from another keychain:"
-        log_info "  bash /Users/u0105821/git/gitlab/general-scripts/setup_title_editor_credentials.sh --migrate"
+        log_info "  bash ${SCRIPT_DIR}/setup_title_editor_credentials.sh --migrate"
         exit 1
     fi
 
@@ -426,7 +426,7 @@ verify_mode() {
         401)
             log_error "Credentials found in Keychain but authentication failed (401)."
             log_info "Update credentials with:"
-            log_info "  bash /Users/u0105821/git/gitlab/general-scripts/setup_title_editor_credentials.sh"
+            log_info "  bash ${SCRIPT_DIR}/setup_title_editor_credentials.sh"
             ;;
         000)
             log_error "Could not verify credentials due to curl/network failure (HTTP 000)."
@@ -461,7 +461,7 @@ migrate_mode() {
     if ! creds=$(read_credentials_from_any_keychain); then
         log_error "No complete '${KEYCHAIN_SERVICE}' credentials found in other keychains."
         log_info "Run setup to enter and save credentials:"
-        log_info "  bash /Users/u0105821/git/gitlab/general-scripts/setup_title_editor_credentials.sh"
+        log_info "  bash ${SCRIPT_DIR}/setup_title_editor_credentials.sh"
         exit 1
     fi
 
@@ -489,7 +489,7 @@ migrate_mode() {
     if verify_entries; then
         log_success "Migration completed. Entries are now stored in login keychain."
         log_info "Next: verify with:"
-        log_info "  bash /Users/u0105821/git/gitlab/general-scripts/setup_title_editor_credentials.sh --verify --debug"
+        log_info "  bash ${SCRIPT_DIR}/setup_title_editor_credentials.sh --verify --debug"
         exit 0
     fi
 

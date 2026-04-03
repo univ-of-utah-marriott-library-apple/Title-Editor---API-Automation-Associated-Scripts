@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 #
 # Build Title Editor Batch File from GitHub Repository
-# Version: 1.8.1
-# Revised: 2026.03.16
+# Version: 1.8.5
+# Revised: 2026.03.25
 #
 # Generates short-format batch file for title_editor_menu.sh --add-patch-batch.
 # Output format:
@@ -23,9 +23,11 @@
 
 set -euo pipefail
 
-SCRIPT_VERSION="1.8.1"
+SCRIPT_VERSION="1.8.5"
 DEBUG_MODE=false
 INCLUDE_PRERELEASE=false
+GITHUB_CONNECT_TIMEOUT="${GITHUB_CONNECT_TIMEOUT:-15}"
+GITHUB_MAX_TIME="${GITHUB_MAX_TIME:-90}"
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -33,13 +35,13 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m'
 
-log_info() { echo -e "${BLUE}[INFO]${NC} $1"; }
-log_success() { echo -e "${GREEN}[SUCCESS]${NC} $1"; }
-log_warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
+log_info() { echo -e "${BLUE}[INFO]${NC} $1" >&2; }
+log_success() { echo -e "${GREEN}[SUCCESS]${NC} $1" >&2; }
+log_warn() { echo -e "${YELLOW}[WARN]${NC} $1" >&2; }
 log_error() { echo -e "${RED}[ERROR]${NC} $1" >&2; }
 debug_log() {
   [[ "$DEBUG_MODE" == "true" ]] || return 0
-  echo -e "${YELLOW}[DEBUG]${NC} $1"
+  echo -e "${YELLOW}[DEBUG]${NC} $1" >&2
 }
 
 show_usage() {
@@ -51,6 +53,7 @@ Interactive mode:
 
 Optional non-interactive flags:
   --repo <owner/repo|repo_url>
+  --non-interactive
   --title-name <name>
   --publisher <publisher>
   --bundle-id <bundle_id>
@@ -270,6 +273,8 @@ github_get() {
       --show-error \
       --fail \
       --location \
+      --connect-timeout "${GITHUB_CONNECT_TIMEOUT}" \
+      --max-time "${GITHUB_MAX_TIME}" \
       --header "Accept: application/vnd.github+json" \
       --header "X-GitHub-Api-Version: 2022-11-28" \
       --header "Authorization: Bearer ${GH_TOKEN}" \
@@ -280,6 +285,8 @@ github_get() {
       --show-error \
       --fail \
       --location \
+      --connect-timeout "${GITHUB_CONNECT_TIMEOUT}" \
+      --max-time "${GITHUB_MAX_TIME}" \
       --header "Accept: application/vnd.github+json" \
       --header "X-GitHub-Api-Version: 2022-11-28" \
       "$url"
@@ -327,8 +334,12 @@ for item in data:
     tag = str(item.get(key, "")).strip()
     if not tag:
         continue
-    if tag.startswith("v") or tag.startswith("V"):
+    # Normalize common version prefixes safely.
+    # - Strip v/V only when followed by a digit (e.g. v1.2.3 -> 1.2.3)
+    # - Strip "version-" prefix (e.g. Version-3.14.1 -> 3.14.1)
+    if re.match(r'^[vV]\d', tag):
         tag = tag[1:]
+    tag = re.sub(r'^(?i:version)[\s._-]*', '', tag)
     tag = tag.strip()
     if not tag or tag in seen:
         continue
@@ -349,13 +360,18 @@ fetch_versions_from_git_tags() {
   local repo="$1"
   command -v git >/dev/null 2>&1 || return 1
 
-  git ls-remote --tags "https://github.com/${repo}.git" 2>/dev/null \
+  GIT_TERMINAL_PROMPT=0 git \
+    -c credential.helper= \
+    -c core.askPass= \
+    -c http.lowSpeedLimit=1 \
+    -c http.lowSpeedTime=30 \
+    ls-remote --tags "https://github.com/${repo}.git" 2>/dev/null \
     | awk '{print $2}' \
     | sed 's#refs/tags/##' \
     | sed 's/\^{}$//' \
     | sed '/^$/d' \
     | awk '!seen[$0]++' \
-    | sed 's/^[vV]//'
+    | sed -E 's/^[vV]([0-9])/\1/'
 }
 
 filter_versions() {
@@ -410,8 +426,14 @@ for raw in rows:
             continue
 
     normalized = version[4:] if vlow.startswith("mac-") else version
-    if not normalized:
+    normalized = re.sub(r'^(?i:version)[\s._-]*', '', normalized).strip()
+    if re.match(r'^[vV]\d', normalized):
+        normalized = normalized[1:]
+
+    match = re.search(r'([0-9]+(?:\.[0-9]+){1,3})', normalized)
+    if not match:
         continue
+    normalized = match.group(1)
 
     if normalized in seen:
         continue
@@ -520,37 +542,6 @@ repo_name   = str(repo_data.get("name") or "").strip()
 app_name = description if (description and len(description) <= 40 and "\n" not in description) else repo_name
 
 print(f"{publisher}\t{app_name}")
-PY
-}
-
-generate_json_file() {
-  local title_name="$1"
-  local output_file="$2"
-  local source_ref="$3"
-  shift 3
-  local versions=("$@")
-
-  python3 - "$title_name" "$source_ref" "$output_file" "${versions[@]}" <<'PY'
-import datetime
-import json
-import pathlib
-import sys
-
-title_name = sys.argv[1]
-source_ref = sys.argv[2]
-output_file = pathlib.Path(sys.argv[3])
-versions = sys.argv[4:]
-
-payload = {
-  "title_name": title_name,
-  "source": source_ref,
-  "generated_at_utc": datetime.datetime.now(datetime.timezone.utc).isoformat(),
-  "count": len(versions),
-  "versions": versions,
-  "batch_rows": [{"title_name": title_name, "version": v} for v in versions],
-}
-
-output_file.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
 PY
 }
 
@@ -701,9 +692,15 @@ def strip_ids(obj):
     cleaned = {}
     for k, v in obj.items():
       key_l = str(k).lower()
-      if key_l.endswith("id") and k not in ("id",):
+      # Preserve keys that are meaningful identifiers in the output schema.
+      if k in ("id", "bundleId", "trackId"):
+        cleaned[k] = strip_ids(v)
         continue
+      # Drop server-side IDs and timestamps that should not be re-imported.
       if k in ("softwareTitleId", "sourceId", "lastModified", "lastModifiedTest"):
+        continue
+      # Drop any remaining keys whose name ends with "id" (e.g. patchId, packageId).
+      if key_l.endswith("id"):
         continue
       cleaned[k] = strip_ids(v)
     return cleaned
@@ -809,12 +806,17 @@ main() {
   local create_json_output=false
   local source_mode="auto"
   local limit="all"
+  local non_interactive=false
 
   while [[ $# -gt 0 ]]; do
     case "$1" in
       --repo)
         repo="${2:-}"
         shift 2
+        ;;
+      --non-interactive)
+        non_interactive=true
+        shift
         ;;
       --title-name)
         title_name="${2:-}"
@@ -904,7 +906,7 @@ main() {
     [[ -z "$title_name" ]] && title_name="$default_title"
   fi
 
-  if [[ -z "$output_json_file" && "$write_json_companion" != "true" && -z "$template_json_file" && -r /dev/tty ]]; then
+  if [[ -z "$output_json_file" && "$write_json_companion" != "true" && -z "$template_json_file" && -r /dev/tty && "$non_interactive" != "true" ]]; then
     echo ""
     echo "Select output mode:"
     echo "  1) API Batch Import (.txt)"
@@ -1123,7 +1125,16 @@ main() {
     log_warn "Tag filter: no mac-prefixed tags found; falling back to plain tags."
   fi
 
-  versions_text=$(printf '%s\n' "$versions_text" | filter_versions "$INCLUDE_PRERELEASE" "$has_mac_prefix" || true)
+  local raw_versions_text="$versions_text"
+  versions_text=$(printf '%s\n' "$raw_versions_text" | filter_versions "$INCLUDE_PRERELEASE" "$has_mac_prefix" || true)
+
+  # Some repositories include mac-* tags that are not version-bearing markers
+  # (for example mac-fixed). If mac-only filtering produces no versions, fall
+  # back to plain tag filtering instead of failing hard.
+  if [[ "$has_mac_prefix" == "true" && -z "$versions_text" ]]; then
+    log_warn "Tag filter: mac-prefixed tags yielded no usable versions; retrying with plain tags."
+    versions_text=$(printf '%s\n' "$raw_versions_text" | filter_versions "$INCLUDE_PRERELEASE" "false" || true)
+  fi
 
   local versions=()
   while IFS= read -r v; do
@@ -1137,7 +1148,7 @@ main() {
   fi
 
   if [[ "${#versions[@]}" -eq 0 ]]; then
-    log_error "No usable mac versions found after filtering."
+    log_error "No usable versions found after filtering."
     log_info "Tip: pass --include-prerelease if this repository only uses beta/alpha/dev tags."
     exit 1
   fi
@@ -1174,7 +1185,7 @@ main() {
   log_info "Rows written: ${#versions[@]}"
   if [[ "$create_batch_output" == "true" ]]; then
     log_info "Use with:"
-    log_info "  bash /Users/u0105821/git/gitlab/general-scripts/title_editor_menu.sh --add-patch-batch --file ${output_file} --yes"
+    log_info "  bash title_editor_menu.sh --add-patch-batch --file ${output_file} --yes"
   fi
   if [[ "$create_json_output" == "true" && -n "$output_json_file" ]]; then
     if [[ -n "$template_json_file" ]]; then

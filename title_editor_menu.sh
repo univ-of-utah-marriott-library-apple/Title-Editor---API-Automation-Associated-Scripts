@@ -55,6 +55,7 @@
 
 script_version="1.5.6"
 TEM_DEBUG_CREDENTIALS="${TITLE_EDITOR_MENU_DEBUG:-false}"
+TEM_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 TEM_CLI_MODE=""
 TEM_CLI_TITLE_ID=""
@@ -176,6 +177,9 @@ _tem_debug_log() {
 _tem_call_with_guard_timeout() {
   local timeout_s="$1"
   shift
+  local cmd_display="$*"
+  local status_interval
+  status_interval="${TEM_API_STATUS_INTERVAL:-15}"
 
   local stdout_file stderr_file
   stdout_file=$(mktemp /tmp/tem_api_stdout.XXXXXX)
@@ -186,6 +190,10 @@ _tem_call_with_guard_timeout() {
   local elapsed=0
 
   while kill -0 "$pid" >/dev/null 2>&1; do
+    if (( status_interval > 0 )) && (( elapsed > 0 )) && (( elapsed % status_interval == 0 )); then
+      printf '%s\n' "INFO: API call still running (${elapsed}s/${timeout_s}s): ${cmd_display}" >&2
+    fi
+
     if (( elapsed >= timeout_s )); then
       kill -TERM "$pid" >/dev/null 2>&1 || true
       sleep 1
@@ -589,7 +597,8 @@ _tem_version_sort_key() {
   [[ "$p2" =~ ^[0-9]+$ ]] || p2=0
   [[ "$p3" =~ ^[0-9]+$ ]] || p3=0
   [[ "$p4" =~ ^[0-9]+$ ]] || p4=0
-  printf '%010d.%010d.%010d.%010d' "$p1" "$p2" "$p3" "$p4"
+  # Force base-10 to avoid octal interpretation of components like 08 or 09.
+  printf '%010d.%010d.%010d.%010d' "$((10#$p1))" "$((10#$p2))" "$((10#$p3))" "$((10#$p4))"
 }
 
 _tem_resolve_title_from_name() {
@@ -1418,9 +1427,9 @@ _tem_check_connected() {
       echo ""
       echo "Could not connect using Keychain credentials."
       echo "You can update saved credentials with:"
-      echo "  bash /Users/u0105821/git/gitlab/general-scripts/setup_title_editor_credentials.sh"
+      echo "  bash ${TEM_SCRIPT_DIR}/setup_title_editor_credentials.sh"
       echo "Or verify saved credentials with:"
-      echo "  bash /Users/u0105821/git/gitlab/general-scripts/setup_title_editor_credentials.sh --verify"
+      echo "  bash ${TEM_SCRIPT_DIR}/setup_title_editor_credentials.sh --verify"
       echo ""
 
       echo "Retrying with saved host/user and prompting for password..."
@@ -1437,7 +1446,7 @@ _tem_check_connected() {
       echo ""
       echo "No complete Title Editor credential set found in Keychain."
       echo "To set up credentials securely, run:"
-      echo "  bash /Users/u0105821/git/gitlab/general-scripts/setup_title_editor_credentials.sh"
+      echo "  bash ${TEM_SCRIPT_DIR}/setup_title_editor_credentials.sh"
       echo ""
     fi
 

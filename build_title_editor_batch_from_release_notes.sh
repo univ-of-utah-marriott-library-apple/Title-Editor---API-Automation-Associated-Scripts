@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 #
 # Build Title Editor Batch File from Release Notes Web Page
-# Version: 1.4.3
-# Revised: 2026.03.17
+# Version: 1.5.5
+# Revised: 2026.04.03
 #
 # Generates short-format batch file for title_editor_menu.sh --add-patch-batch.
 # Output format:
@@ -36,7 +36,7 @@
 
 set -euo pipefail
 
-SCRIPT_VERSION="1.4.3"
+SCRIPT_VERSION="1.5.5"
 DEBUG_MODE=false
 
 RED='\033[0;31m'
@@ -65,6 +65,7 @@ Optional non-interactive flags:
   --url <release_notes_page_url>
   --mac-app-store
   --mac-app-store-name <n>
+  --non-interactive
   --title-name <n>
   --publisher <publisher>
   --bundle-id <bundle_id>
@@ -80,6 +81,7 @@ Optional non-interactive flags:
 
 Notes:
   - Fetches a release-notes web page and extracts versions from headings or table rows.
+  - Also supports Jamf Patch XML sources by reading <software_version> entries.
   - Use --mac-app-store to search by app name, pick a listing, and parse App Store version history.
     Bundle ID is automatically populated from the App Store listing.
   - Writes short-format batch file for Title Editor:
@@ -113,6 +115,32 @@ trim() {
   value="${value#${value%%[![:space:]]*}}"
   value="${value%${value##*[![:space:]]}}"
   printf '%s' "$value"
+}
+
+sort_versions_desc_unique() {
+  python3 - "$@" <<'PY'
+import re
+import sys
+
+def key(v: str):
+    # Version-aware sort for dotted numeric versions (e.g. 5.3.2, 2026.1).
+    # Keep a lexical fallback suffix so unexpected values still sort stably.
+    parts = [int(x) for x in re.findall(r'\d+', v)]
+    return (parts, v)
+
+seen = set()
+vals = []
+for raw in sys.argv[1:]:
+    v = str(raw or "").strip()
+    if not v or v in seen:
+        continue
+    seen.add(v)
+    vals.append(v)
+
+vals.sort(key=key, reverse=True)
+for v in vals:
+    print(v)
+PY
 }
 
 infer_software_title() {
@@ -272,7 +300,7 @@ select_mac_app_store_listing() {
   fi
 
   while true; do
-    read -r -p "Select listing number [1-${#listings[@]}]: " idx
+    read -r -p "Select listing number [1-${#listings[@]}]: " idx < /dev/tty
     idx=$(trim "$idx")
 
     if [[ "$idx" =~ ^[0-9]+$ ]] && (( idx >= 1 && idx <= ${#listings[@]} )); then
@@ -300,14 +328,57 @@ prompt_required() {
 
 fetch_page() {
   local url="$1"
-  if curl \
-    --silent \
-    --fail \
-    --location \
-    --max-time 60 \
-    --connect-timeout 15 \
-    "$url" 2>/dev/null; then
+  local -a curl_cmd
+  local -a browser_retry_cmd
+  if [[ -f "$url" ]]; then
+    cat "$url"
     return 0
+  fi
+
+  curl_cmd=(
+    curl
+    --silent
+    --fail
+    --location
+    --max-time 60
+    --connect-timeout 15
+  )
+
+  if [[ "${TITLE_EDITOR_CURL_INSECURE:-false}" == "true" ]]; then
+    curl_cmd+=(--insecure)
+  fi
+  if [[ -n "${TITLE_EDITOR_HTTP_AUTH_BEARER:-}" ]]; then
+    curl_cmd+=(--header "Authorization: Bearer ${TITLE_EDITOR_HTTP_AUTH_BEARER}")
+  fi
+  if [[ -n "${TITLE_EDITOR_HTTP_BASIC_USER:-}" || -n "${TITLE_EDITOR_HTTP_BASIC_PASS:-}" ]]; then
+    curl_cmd+=(--user "${TITLE_EDITOR_HTTP_BASIC_USER:-}:${TITLE_EDITOR_HTTP_BASIC_PASS:-}")
+  fi
+  if [[ -n "${TITLE_EDITOR_HTTP_ACCEPT:-}" ]]; then
+    curl_cmd+=(--header "Accept: ${TITLE_EDITOR_HTTP_ACCEPT}")
+  elif [[ "$url" == *"/JSSResource/"* || "$url" == *"/api/"* ]]; then
+    curl_cmd+=(--header "Accept: application/xml")
+  fi
+
+  if "${curl_cmd[@]}" "$url" 2>/dev/null; then
+    return 0
+  fi
+
+  # Some vendor sites block default curl signatures; retry with browser-like
+  # request headers unless caller already supplied a custom user-agent.
+  if [[ -z "${TITLE_EDITOR_HTTP_USER_AGENT:-}" ]]; then
+    browser_retry_cmd=("${curl_cmd[@]}")
+    browser_retry_cmd+=(
+      --compressed
+      --header "User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 14_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+      --header "Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+      --header "Accept-Language: en-US,en;q=0.9"
+      --header "Cache-Control: no-cache"
+      --header "Pragma: no-cache"
+    )
+    if "${browser_retry_cmd[@]}" "$url" 2>/dev/null; then
+      debug_log "Primary fetch failed; browser-header retry succeeded for: ${url}"
+      return 0
+    fi
   fi
 
   # Fallback for Zendesk-hosted help-center article pages that can return
@@ -378,6 +449,29 @@ try:
     raw = open(html_file, 'r', encoding='utf-8', errors='replace').read()
 except Exception:
     sys.exit(1)
+
+# Keep the original document for fallbacks that need script-embedded data.
+raw_original = raw
+
+# Jamf Patch XML mode:
+# Parse versions from <software_version> tags and title from <name>.
+if "<patch_software_title>" in raw or "<software_version>" in raw:
+    title_match = re.search(r"<name>\s*([^<]+?)\s*</name>", raw, flags=re.I)
+    xml_title = title_match.group(1).strip() if title_match else "Software Title"
+    xml_title = re.sub(r"\s*\(Jamf\)\s*$", "", xml_title, flags=re.I).strip()
+
+    versions = []
+    seen_versions = set()
+    for m in re.finditer(r"<software_version>\s*([^<]+?)\s*</software_version>", raw, flags=re.I):
+        version = m.group(1).strip()
+        if version and version not in seen_versions:
+            seen_versions.add(version)
+            versions.append(version)
+
+    print(f"TITLE\t{xml_title}")
+    for v in versions:
+        print(f"VERSION\t{v}")
+    sys.exit(0)
 
 # Remove scripts/styles that can contain noise.
 raw = re.sub(r'<script\b[^>]*>.*?</script>', ' ', raw, flags=re.I | re.S)
@@ -534,6 +628,27 @@ if not versions:
             seen_versions.add(version)
             versions.append(version)
 
+    # Fallback for script-rendered pages that embed versions in JSON, for example:
+    # "version":"2026.1"
+    if not versions:
+      json_version_pattern = re.compile(r'"version"\s*:\s*"(\d+(?:\.\d+){1,3})"', flags=re.I)
+      for match in json_version_pattern.finditer(raw_original):
+        version = match.group(1)
+        if version not in seen_versions:
+          seen_versions.add(version)
+          versions.append(version)
+
+    # Fallback for JetBrains-style "What's New" URLs, for example:
+    # /pycharm/whatsnew/2024-3-2/  -> 2024.3.2
+    if not versions:
+      whatsnew_pattern = re.compile(r'(?i)/whatsnew/(\d{4}(?:-\d+){1,2})/')
+      for match in whatsnew_pattern.finditer(raw_original):
+        version = match.group(1).replace('-', '.')
+        if version not in seen_versions:
+          seen_versions.add(version)
+          versions.append(version)
+
+
 # Infer title from most frequent product in version headings.
 inferred_title = ""
 if pairs:
@@ -596,36 +711,7 @@ generate_batch_file() {
   } > "$output_file"
 }
 
-generate_json_file() {
-  local title_name="$1"
-  local output_file="$2"
-  local source_url="$3"
-  shift 3
-  local versions=("$@")
 
-  python3 - "$title_name" "$source_url" "$output_file" "${versions[@]}" <<'PY'
-import datetime
-import json
-import pathlib
-import sys
-
-title_name = sys.argv[1]
-source_url = sys.argv[2]
-output_file = pathlib.Path(sys.argv[3])
-versions = sys.argv[4:]
-
-payload = {
-  "title_name": title_name,
-  "source_url": source_url,
-  "generated_at_utc": datetime.datetime.now(datetime.timezone.utc).isoformat(),
-  "count": len(versions),
-  "versions": versions,
-  "batch_rows": [{"title_name": title_name, "version": v} for v in versions],
-}
-
-output_file.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
-PY
-}
 
 generate_jamf_import_json_file() {
   local title_name="$1"
@@ -772,9 +858,15 @@ def strip_ids(obj):
     cleaned = {}
     for k, v in obj.items():
       key_l = str(k).lower()
-      if key_l.endswith("id") and k not in ("id",):
+      # Preserve keys that are meaningful identifiers in the output schema.
+      if k in ("id", "bundleId", "trackId"):
+        cleaned[k] = strip_ids(v)
         continue
+      # Drop server-side IDs and timestamps that should not be re-imported.
       if k in ("softwareTitleId", "sourceId", "lastModified", "lastModifiedTest"):
+        continue
+      # Drop any remaining keys whose name ends with "id" (e.g. patchId, packageId).
+      if key_l.endswith("id"):
         continue
       cleaned[k] = strip_ids(v)
     return cleaned
@@ -886,6 +978,7 @@ main() {
   local limit="all"
   local mac_app_store_mode=false
   local mac_app_store_name=""
+  local non_interactive=false
 
   while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -901,6 +994,10 @@ main() {
         mac_app_store_name="${2:-}"
         mac_app_store_mode=true
         shift 2
+        ;;
+      --non-interactive)
+        non_interactive=true
+        shift
         ;;
       --title-name)
         title_name="${2:-}"
@@ -960,7 +1057,7 @@ main() {
 
   print_banner
 
-  if [[ -z "$url" && "$mac_app_store_mode" != "true" && -r /dev/tty ]]; then
+  if [[ -z "$url" && "$mac_app_store_mode" != "true" && -r /dev/tty && "$non_interactive" != "true" ]]; then
     echo ""
     echo "Select source type:"
     echo "  1) Release notes URL (web page)"
@@ -1027,8 +1124,8 @@ main() {
     url=$(prompt_required "Release notes page URL: ")
   fi
 
-  if [[ "$mac_app_store_mode" != "true" && ! "$url" =~ ^https?:// ]]; then
-    log_error "URL must start with http:// or https://"
+  if [[ "$mac_app_store_mode" != "true" && ! "$url" =~ ^https?:// && ! -f "$url" ]]; then
+    log_error "URL must start with http:// or https:// (or be a readable local file path)"
     exit 1
   fi
 
@@ -1140,7 +1237,7 @@ main() {
     log_warn "Title name contains 'Release Notes' and may not match a software title in Title Editor."
   fi
 
-  if [[ -z "$output_json_file" && "$write_json_companion" != "true" && -z "$template_json_file" && -r /dev/tty ]]; then
+  if [[ -z "$output_json_file" && "$write_json_companion" != "true" && -z "$template_json_file" && -r /dev/tty && "$non_interactive" != "true" ]]; then
     echo ""
     echo "Select output mode:"
     echo "  1) API Batch Import (.txt)"
@@ -1156,7 +1253,7 @@ main() {
         ;;
       2)
         output_file=""
-        write_json_companion=false
+        write_json_companion=true
         ;;
       3)
         write_json_companion=true
@@ -1196,24 +1293,27 @@ main() {
     fi
   fi
 
-  local default_output
-  default_output=$(default_output_file_for_title "$PWD" "$title_name")
-  if [[ -z "$output_file" ]]; then
-    read -r -p "Output file path [${default_output}]: " output_file
-    output_file=$(trim "$output_file")
-    [[ -z "$output_file" ]] && output_file="$default_output"
-  fi
+  # In JSON-only mode output_file is intentionally empty; skip .txt prompting.
+  if [[ -n "$output_file" || "$write_json_companion" != "true" ]]; then
+    local default_output
+    default_output=$(default_output_file_for_title "$PWD" "$title_name")
+    if [[ -z "$output_file" ]]; then
+      read -r -p "Output file path [${default_output}]: " output_file
+      output_file=$(trim "$output_file")
+      [[ -z "$output_file" ]] && output_file="$default_output"
+    fi
 
-  if [[ -d "$output_file" ]]; then
-    output_file="${output_file%/}/title_editor_batch_$(echo "$title_name" | tr '[:upper:]' '[:lower:]' | tr ' /' '__').txt"
-    log_info "Output path is a directory; using file: ${output_file}"
+    if [[ -d "$output_file" ]]; then
+      output_file="${output_file%/}/title_editor_batch_$(echo "$title_name" | tr '[:upper:]' '[:lower:]' | tr ' /' '__').txt"
+      log_info "Output path is a directory; using file: ${output_file}"
+    fi
   fi
 
   if [[ "$write_json_companion" == "true" && -z "$output_json_file" ]]; then
-    if [[ "$output_file" == *.txt ]]; then
+    if [[ -n "$output_file" && "$output_file" == *.txt ]]; then
       output_json_file="${output_file%.txt}.json"
     else
-      output_json_file="${output_file}.json"
+      output_json_file="$(default_json_output_file_for_title "$PWD" "$title_name")"
     fi
   fi
 
@@ -1228,13 +1328,26 @@ main() {
   fi
 
   local total_found="${#versions[@]}"
+  if [[ "${#versions[@]}" -gt 1 ]]; then
+    local sorted_versions=()
+    local sorted_version
+    while IFS= read -r sorted_version; do
+      [[ -n "$sorted_version" ]] && sorted_versions+=("$sorted_version")
+    done < <(sort_versions_desc_unique "${versions[@]}")
+    if [[ "${#sorted_versions[@]}" -gt 0 ]]; then
+      versions=("${sorted_versions[@]}")
+    fi
+  fi
+
   if [[ "$limit_all" != "true" && "${#versions[@]}" -gt "$limit" ]]; then
     versions=("${versions[@]:0:$limit}")
     log_info "Truncated versions to ${#versions[@]} due to --limit ${limit} (found ${total_found})."
   fi
 
-  mkdir -p "$(dirname "$output_file")"
-  generate_batch_file "$title_name" "$output_file" "${versions[@]}"
+  if [[ -n "$output_file" ]]; then
+    mkdir -p "$(dirname "$output_file")"
+    generate_batch_file "$title_name" "$output_file" "${versions[@]}"
+  fi
 
   if [[ -n "$output_json_file" ]]; then
     mkdir -p "$(dirname "$output_json_file")"
@@ -1245,14 +1358,18 @@ main() {
     fi
   fi
 
-  log_success "Batch file created: ${output_file}"
+  if [[ -n "$output_file" ]]; then
+    log_success "Batch file created: ${output_file}"
+  fi
   if [[ -n "$output_json_file" ]]; then
     log_success "JSON file created: ${output_json_file}"
   fi
   log_info "Title name: ${title_name}"
   log_info "Versions written: ${#versions[@]}"
-  log_info "Use with:"
-  log_info "  bash /Users/u0105821/git/gitlab/general-scripts/title_editor_menu.sh --add-patch-batch --file ${output_file} --yes"
+  if [[ -n "$output_file" ]]; then
+    log_info "Use with:"
+    log_info "  bash title_editor_menu.sh --add-patch-batch --file ${output_file} --yes"
+  fi
   if [[ -n "$output_json_file" ]]; then
     if [[ -n "$template_json_file" ]]; then
       log_info "JSON mode: Title Editor template-based import structure (template: ${template_json_file})"

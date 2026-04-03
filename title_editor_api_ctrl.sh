@@ -14,7 +14,7 @@
 #
 # Usage:
 #   source title_editor_api_ctrl.sh
-#   title_editor_api_connect "https://user:password@server:port"
+#   title_editor_api_connect "https://<user>:<password>@<server-host>"
 #   title_editor_api_get "softwaretitles"
 #   title_editor_api_post "patches" '{"name": "New Patch", "description": "Details..."}'
 #
@@ -23,7 +23,7 @@
 #
 # Example:
 #   source title_editor_api_ctrl.sh
-#   title_editor_api_connect "https://myuser:mypassword@myserver.appcatalog.jamfcloud.com"
+#   title_editor_api_connect "https://<user>:<password>@<server-host>"
 #   title_editor_api_get "softwaretitles"
 #   title_editor_api_disconnect
 #
@@ -916,12 +916,12 @@ Usage:
   source title_editor_api_ctrl.sh
 
   # Connect
-  title_editor_api_connect "https://myuser:mypassword@myserver.appcatalog.jamfcloud.com"
+  title_editor_api_connect "https://<user>:<password>@<server-host>"
 
   # Or use export variables (required when sourced in zsh/bash):
-  export TITLE_EDITOR_API_HOST=myserver.appcatalog.jamfcloud.com
-  export TITLE_EDITOR_API_USER=myuser
-  export TITLE_EDITOR_API_PW=mypassword  # omit to be prompted securely
+  export TITLE_EDITOR_API_HOST=<server-host>
+  export TITLE_EDITOR_API_USER=<user>
+  export TITLE_EDITOR_API_PW=<password>  # omit to be prompted securely
   title_editor_api_connect
 
   # API calls
