@@ -323,6 +323,41 @@ bash ~/title_editor/title_editor_menu.sh \
 
 ---
 
+### Quick Start: Brand-New Title from Jamf Patch Catalog
+
+Use this flow when Jamf Patch catalog data is the best source of version history, especially where patch metadata and real install-path behavior need alignment before Title Editor import.
+
+```bash
+# Step 1 — Build version history from Jamf Patch catalog data
+bash ~/title_editor/build_title_editor_batch_from_jamf_patch_catalog.sh \
+  --source jamf-pro \
+  --software-name "Opera (Jamf)" \
+  --title-name "Opera" \
+  --limit all \
+  --output ~/title_editor/batches/opera_from_jamf.txt
+
+# Step 2 — Create the title and import batch versions
+source ~/title_editor/title_editor_api_ctrl.sh
+
+bash ~/title_editor/title_editor_menu.sh \
+  --create-title \
+  --title-name "Opera" \
+  --new-title-id opera \
+  --publisher "Opera" \
+  --bundle-id com.operasoftware.Opera \
+  --version 120.0.5543.93 \
+  --yes
+
+bash ~/title_editor/title_editor_menu.sh \
+  --add-patch-batch \
+  --file ~/title_editor/batches/opera_from_jamf.txt
+
+# Step 3 — In Jamf Pro: configure from Title Editor source,
+# attach tested package, and scope Patch Policy deployment.
+```
+
+---
+
 ### Quick Start: Brand-New Title from the Mac App Store
 
 Setting up a repackaged MAS application — for example, Final Cut Pro — where the version history is pulled from the App Store listing.
