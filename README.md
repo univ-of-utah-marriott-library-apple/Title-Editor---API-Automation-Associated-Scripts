@@ -1,7 +1,8 @@
-# Title Editor - API Automation & Associated Scripts
+# Title Editor - API Automation
 
 ## Table of Contents
 
+- [Release Notes Update (2026-04-03)](#release-notes-update-2026-04-03)
 - [Introduction and Background](#introduction-and-background)
 - [Installation and Setup](#installation-and-setup)
 - [Quick Start](#quick-start)
@@ -11,6 +12,83 @@
 - [Restricted and Campus-Only Applications](#restricted-and-campus-only-applications)
 - [Mac App Store Applications — Repackaging and Post-Install Automation](#mac-app-store-applications--repackaging-and-post-install-automation)
 - [Quick Reference](#quick-reference)
+
+---
+
+## Release Notes Update (2026-04-03)
+
+### Scripts included in this update
+
+- `build_title_editor_batch_from_github.sh`
+- `build_title_editor_batch_from_jamf_patch_catalog.sh`
+- `build_title_editor_batch_from_release_notes.sh`
+- `setup_title_editor_credentials.sh`
+- `title_editor_api_ctrl.sh`
+- `title_editor_menu.sh`
+- `title_editor_software_title_defaults_from_user_prompt.sh`
+- `update_title_editor_versions.sh`
+
+### Why `build_title_editor_batch_from_jamf_patch_catalog.sh` exists
+
+`build_title_editor_batch_from_jamf_patch_catalog.sh` primarily exists to help resolve Jamf Patch Extension Attribute (EA) issues where applications are installed in a sub-folder under `/Applications` (for example `/Applications/Web Browsers`).
+
+Example Jamf Patch EA for Opera:
+
+```sh
+#!/bin/bash
+####################################################
+# A script to collect the Bundle Version of Opera. #
+####################################################
+PATH_EXPR=(/Applications/*/Contents/MacOS/Opera)
+KEY="CFBundleVersion"
+IFS=$'\n'
+unset RESULTS
+for BINARY in "${PATH_EXPR[@]}"; do
+    PLIST=$(/usr/bin/dirname "${BINARY}")/../Info.plist
+    VERSION=$(/usr/bin/defaults read "${PLIST}" "${KEY}" 2>/dev/null)
+    if [ -n "${VERSION}" ] ; then
+        RESULTS+=("${VERSION}")
+    fi
+done
+unset IFS
+if [ ${#RESULTS[*]} -eq 0 ]; then
+    /bin/echo "<result></result>"
+else
+    IFS="|"
+    /bin/echo "<result>|${RESULTS[*]}|</result>"
+    unset IFS
+fi
+exit 0
+```
+
+Needed EA in Title Editor context (specific subfolder + bundle ID check):
+
+```sh
+#!/bin/sh
+####################################################
+# A script to collect the Bundle Version of Opera. #
+####################################################
+PATH_EXPR="/Applications/Web\ Browsers/*/Contents/MacOS/Opera"
+BUNDLE_ID="com.operasoftware.Opera"
+KEY="CFBundleVersion"
+RESULTS=()
+IFS=$'\n'
+for BINARY in ${PATH_EXPR}; do
+    PLIST="$(/usr/bin/dirname "${BINARY}")/../Info.plist"
+    if [ "$(/usr/bin/defaults read "${PLIST}" CFBundleIdentifier 2>/dev/null)" == "${BUNDLE_ID}" ]; then
+        RESULTS+=($(/usr/bin/defaults read "${PLIST}" "${KEY}" 2>/dev/null))
+    fi
+done
+unset IFS
+if [ ${#RESULTS[@]} -eq 0 ]; then
+    /bin/echo "<result></result>"
+else
+    IFS="|"
+    /bin/echo "<result>${RESULTS[*]}</result>"
+    unset IFS
+fi
+exit 0
+```
 
 ---
 
@@ -576,6 +654,20 @@ bash ~/title_editor/title_editor_menu.sh \
 
 ---
 
+### Sample Installomator + Title Editor Applications at Marriott Library
+
+| Application | Installomator / Title Editor Integration |
+|---|---|
+| Zoom | Installomator label: `zoom`. Version history scraped from Zoom's release notes page. |
+| Slack | Installomator label: `slack`. GitHub releases tracked via the batch builder. |
+| Microsoft Teams | Installomator label: `microsoftteams`. Version history from Microsoft's release notes page. |
+| Jamf Connect | Installomator label: `jamfconnect`. Title manually created; versions added as each release is announced. |
+| Suspicious Package | Installomator label: `suspiciouspackage`. GitHub releases parsed with the batch builder. |
+| BBEdit | Installomator label: `bbedit`. GitHub release tags populate version history. |
+
+
+---
+
 ## Restricted and Campus-Only Applications
 
 ### Overview
@@ -695,38 +787,6 @@ This approach provides:
 6. Create or update the Title Editor software title using the `--mac-app-store` batch builder (for initial version history) or `--add-patch` (for new releases).
 7. In Jamf Pro Patch Management, attach the PKG to the appropriate version record. The compliance dashboard immediately shows installed vs. current versions across the fleet.
 8. The Patch Policy distributes the new version to scoped machines with IT-configured deadlines, deferrals, and user notifications.
-
----
-
-### Post-Install Scripting Options: PKG Script vs. Jamf Pro Policy Script
-
-Repackaging the MAS application as a PKG is always required when post-install configuration is needed. Jamf Pro's MDM-based VPP/MAS app assignment has no script hooks — pre/post-install scripts are only supported in the context of a **Jamf Pro Policy**, and Policies require a standard PKG. The repackaging step is therefore a prerequisite for any scripting to occur.
-
-Once the application is repackaged and deployed via a Jamf Pro Policy, there are two places the post-install script can live. Both require the PKG; the difference is where the configuration logic executes.
-
-#### Option 1: Post-Install Script Embedded in the PKG
-
-The script is included as a `postinstall` payload inside the PKG itself, built with Jamf Composer, `pkgbuild`/`productbuild`, or `munkipkg`. It runs automatically whenever the PKG is installed, regardless of which Policy or mechanism delivers it.
-
-**Best for:** configuration that must always accompany the application payload — license acceptance, developer directory setup, or anything that must run before the app is usable.
-
-#### Option 2: Post-Install Script in the Jamf Pro Policy
-
-The PKG installs the application, and a separate script is added to the same Jamf Pro Policy as a script payload set to run **After** the package installation. The script executes as part of the same Policy run, after the PKG has finished.
-
-**Best for:** configuration that is environment-specific or may need to be updated independently of the PKG — shared library path setup, preference seeding, or organizational defaults that vary between deployment groups. Updating the script does not require rebuilding the PKG.
-
-#### Comparison
-
-| | PKG post-install script | Jamf Pro Policy script |
-|---|---|---|
-| Requires repackaging | Yes | Yes |
-| Runs on every install regardless of delivery method | Yes | No — only when delivered by the Policy containing the script |
-| Script updates require PKG rebuild | Yes | No — update the script in Jamf Pro independently |
-| Supports bundled file payloads alongside the script | Yes | No — script only |
-| Works with Patch Policies | Yes | Yes — add the script to the Policy backing the Patch Policy |
-
-> **Both options are fully compatible with Title Editor version tracking.** The PKG attaches to the version record in Jamf Pro Patch Management regardless of whether the post-install logic lives inside the PKG or in the Policy script payload. Title Editor provides the compliance dashboard and drives Patch Policy enforcement either way.
 
 ---
 
@@ -859,5 +919,3 @@ bash ~/title_editor/title_editor_menu.sh \
 | `TEM_RECONNECT_TIMEOUT` | Timeout for token-refresh reconnect attempts (default 20s). |
 | `TEM_TITLE_UPDATE_TIMEOUT` | Timeout for the `currentVersion` PATCH call after patch creation (default 20s). |
 | `TEM_AUTO_RESEQUENCE_ON_CHANGE` | Set to `false` to disable automatic patch resequencing after batch operations. |
-
----
