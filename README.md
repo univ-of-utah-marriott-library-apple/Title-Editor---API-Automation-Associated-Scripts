@@ -2,6 +2,7 @@
 
 ## Table of Contents
 
+- [Release Notes Update (2026-04-06)](#release-notes-update-2026-04-06)
 - [Release Notes Update (2026-04-03)](#release-notes-update-2026-04-03)
 - [Introduction and Background](#introduction-and-background)
 - [Installation and Setup](#installation-and-setup)
@@ -15,6 +16,31 @@
 
 ---
 
+## Release Notes Update (2026-04-06)
+
+### Summary
+
+- Added `setup_jamf_pro_credentials.sh` into the documented toolkit and sync scope.
+- Expanded README coverage to include Jamf Pro credential setup/verification flows.
+- Added Quick Start example for Jamf Patch catalog-driven title initialization.
+- Added Script Reference entries for newer helper/orchestration scripts.
+- Updated command quick-reference rows to include Jamf Pro credential operations.
+
+### Scripts emphasized in this update
+
+- `setup_jamf_pro_credentials.sh`
+- `build_title_editor_batch_from_jamf_patch_catalog.sh`
+- `title_editor_software_title_defaults_from_user_prompt.sh`
+- `update_title_editor_versions.sh`
+
+### Notes for reviewers
+
+- Ensure `setup_jamf_pro_credentials.sh` is present in the repository before release.
+- Verify Keychain-backed credential workflows on a standard user account.
+- Verify Jamf Patch catalog batch generation using both `--source public` and `--source jamf-pro` as needed for your environment.
+
+---
+
 ## Release Notes Update (2026-04-03)
 
 ### Scripts included in this update
@@ -22,6 +48,7 @@
 - `build_title_editor_batch_from_github.sh`
 - `build_title_editor_batch_from_jamf_patch_catalog.sh`
 - `build_title_editor_batch_from_release_notes.sh`
+- `setup_jamf_pro_credentials.sh`
 - `setup_title_editor_credentials.sh`
 - `title_editor_api_ctrl.sh`
 - `title_editor_menu.sh`
@@ -159,6 +186,7 @@ Title Editor exposes a comprehensive REST API. The Marriott Library IT team has 
 | Script | Purpose |
 |---|---|
 | `title_editor_api_ctrl.sh` | Core API library. Must be sourced by all other scripts. Manages authentication, Bearer token lifecycle (with background keep-alive), and all HTTP operations against the Title Editor REST API. |
+| `setup_jamf_pro_credentials.sh` | One-time Jamf Pro credential wizard. Stores Jamf Pro URL, API client ID, and API client secret securely in the macOS Login Keychain for Jamf Patch catalog workflows. |
 | `setup_title_editor_credentials.sh` | One-time credential wizard. Stores the Title Editor hostname, username, and password securely in the macOS Login Keychain under the service name `TitleEditorAPI`. |
 | `title_editor_menu.sh` | Interactive CLI menu and full non-interactive CLI. Browse titles, view patch version details, add versions individually or in batch, create new titles, export title JSON. |
 | `build_title_editor_batch_from_github.sh` | Queries a GitHub repository's releases or tags and generates a batch import file for bulk version history population. |
@@ -417,6 +445,23 @@ bash ~/title_editor/title_editor_menu.sh \
 ---
 
 ## Script Reference
+
+### `setup_jamf_pro_credentials.sh`
+
+Stores Jamf Pro API credentials for scripts that query Jamf patch metadata (for example `build_title_editor_batch_from_jamf_patch_catalog.sh` when `--source jamf-pro` is used).
+
+```bash
+# Store Jamf Pro credentials in Keychain
+bash ~/title_editor/setup_jamf_pro_credentials.sh
+
+# Verify stored credentials against Jamf Pro OAuth endpoint
+bash ~/title_editor/setup_jamf_pro_credentials.sh --verify
+```
+
+- Stores URL + client credentials securely in Keychain (no plaintext output).
+- Supports safe debug output with `--debug` (fingerprints/metadata only).
+
+---
 
 ### `title_editor_api_ctrl.sh` — API Library
 
@@ -980,6 +1025,8 @@ bash ~/title_editor/title_editor_menu.sh \
 
 | Task | Command |
 |---|---|
+| Store Jamf Pro credentials | `bash setup_jamf_pro_credentials.sh` |
+| Verify Jamf Pro credentials | `bash setup_jamf_pro_credentials.sh --verify` |
 | Store credentials | `bash setup_title_editor_credentials.sh` |
 | Verify credentials | `bash setup_title_editor_credentials.sh --verify` |
 | Interactive menu | `source title_editor_api_ctrl.sh && bash title_editor_menu.sh` |
