@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 #
 # Title Editor API Interactive Menu
-# Version: 1.5.6
-# Revised: 2026.03.16
+# Version: 1.5.7
+# Revised: 2026.04.10
 #
 # Provides an interactive command-line menu to browse and view software titles from the Jamf Title Editor API.
 # Also supports programmatic patch creation via CLI flags and batch files.
@@ -53,7 +53,7 @@
 # permission. This software is supplied as is without expressed or
 # implied warranties of any kind.
 
-script_version="1.5.6"
+script_version="1.5.7"
 TEM_DEBUG_CREDENTIALS="${TITLE_EDITOR_MENU_DEBUG:-false}"
 TEM_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
@@ -438,6 +438,7 @@ Programmatic add patch:
   bash title_editor_menu.sh --export-title-json --title-id <id>|--title-name <name> [--output <path>]
   bash title_editor_menu.sh --resequence-only --title-id <id>|--title-name <name> [--dry-run] [--yes]
   bash title_editor_menu.sh --cleanup-non-semver --title-id <id>|--title-name <name> [--dry-run] [--yes]
+  bash title_editor_menu.sh --sync-from-batch --title-id <id>|--title-name <name> --file <path> [--dry-run] [--yes]
 
 Options for --add-patch:
   --create-title           Create a new software title first
@@ -461,6 +462,7 @@ Options for --add-patch:
   --repair-recreate-existing If repair does not persist, recreate existing patch (delete + create)
   --resequence-only         Reorder existing patches by version (newest first)
   --cleanup-non-semver      Delete existing patch versions that are not numeric semver-like (n.n / n.n.n / n.n.n.n)
+  --sync-from-batch         Delete existing patch versions not present in a batch file, then resequence
   --file <path>             Batch file path for --add-patch-batch
   --batch-file <path>       Alias for --file
   --start-line <n>          For --add-patch-batch, start processing at file line n (1-based)
@@ -1267,6 +1269,11 @@ _tem_parse_args() {
       --cleanup-non-semver)
         TEM_CLI_MODE="cleanup-non-semver"
         TEM_CLI_CLEANUP_NON_SEMVER=true
+        TEM_NONINTERACTIVE=true
+        shift
+        ;;
+      --sync-from-batch)
+        TEM_CLI_MODE="sync-from-batch"
         TEM_NONINTERACTIVE=true
         shift
         ;;
@@ -2821,6 +2828,225 @@ PY
   [[ "$failed" -eq 0 ]]
 }
 
+_tem_collect_batch_versions_for_title() {
+  local batch_file="$1"
+  local title_id="$2"
+  local title_name="$3"
+
+  python3 - "$batch_file" "$title_id" "$title_name" <<'PY'
+import sys
+
+batch_file = sys.argv[1]
+title_id = (sys.argv[2] or "").strip()
+title_name = (sys.argv[3] or "").strip().lower()
+
+expected_full = "title_id|title_name|version|release_date|min_os|standalone|reboot|bundle_id|app_name|yes"
+expected_short = "title_name|version"
+
+fmt = None
+seen = set()
+
+def emit(version):
+    v = (version or "").strip()
+    if not v or v in seen:
+        return
+    seen.add(v)
+    print(v)
+
+with open(batch_file, "r", encoding="utf-8", errors="replace") as fh:
+    for raw in fh:
+        line = raw.rstrip("\r\n")
+        if not line.strip() or line.lstrip().startswith("#"):
+            continue
+
+        if fmt is None:
+            hdr = line.strip()
+            if hdr == expected_full:
+                fmt = "full"
+                continue
+            if hdr == expected_short:
+                fmt = "short"
+                continue
+
+            parts = [p.strip() for p in line.split("|")]
+            if len(parts) >= 2 and parts[0] and parts[1] and (len(parts) < 3 or not parts[2]):
+                fmt = "short"
+            else:
+                fmt = "full"
+
+        parts = [p.strip() for p in line.split("|")]
+
+        if fmt == "short":
+            if len(parts) < 2:
+                continue
+            row_title_name = parts[0]
+            row_version = parts[1]
+            if title_name and row_title_name.lower() != title_name:
+                continue
+            emit(row_version)
+            continue
+
+        # full format
+        if len(parts) < 3:
+            continue
+        row_title_id = parts[0]
+        row_title_name = parts[1]
+        row_version = parts[2]
+
+        include = False
+        if title_id and row_title_id:
+            include = (row_title_id == title_id)
+        elif title_name and row_title_name:
+            include = (row_title_name.lower() == title_name)
+        elif title_name and not row_title_id and not row_title_name:
+            include = False
+
+        if include:
+            emit(row_version)
+PY
+}
+
+_tem_run_sync_from_batch_cli() {
+  if [[ -n "$TEM_CLI_TITLE_ID" && -n "$TEM_CLI_TITLE_NAME" ]]; then
+    echo "ERROR: Use either --title-id or --title-name, not both" >&2
+    return 1
+  fi
+
+  if [[ -z "$TEM_CLI_TITLE_ID" && -z "$TEM_CLI_TITLE_NAME" ]]; then
+    echo "ERROR: --sync-from-batch requires --title-id or --title-name" >&2
+    return 1
+  fi
+
+  if [[ -z "$TEM_CLI_BATCH_FILE" ]]; then
+    echo "ERROR: --sync-from-batch requires --file <path>" >&2
+    return 1
+  fi
+
+  if [[ ! -f "$TEM_CLI_BATCH_FILE" ]]; then
+    echo "ERROR: Batch file not found: $TEM_CLI_BATCH_FILE" >&2
+    return 1
+  fi
+
+  if [[ -n "$TEM_CLI_TITLE_ID" ]] && ! [[ "$TEM_CLI_TITLE_ID" =~ ^[0-9]+$ ]]; then
+    echo "ERROR: --title-id must be numeric" >&2
+    return 1
+  fi
+
+  if [[ -n "$TEM_CLI_TITLE_NAME" ]]; then
+    local resolved resolved_id resolved_name
+    resolved=$(_tem_resolve_title_from_name "$TEM_CLI_TITLE_NAME") || return 1
+    resolved_id=$(printf '%s\n' "$resolved" | awk -F'|' 'NR==1 {print $1}')
+    resolved_name=$(printf '%s\n' "$resolved" | awk -F'|' 'NR==1 {print $2}')
+    TEM_CLI_TITLE_ID="$resolved_id"
+    TEM_CLI_TITLE_NAME="$resolved_name"
+  fi
+
+  local title_id="$TEM_CLI_TITLE_ID"
+  local title_data title_name
+  title_data=$(_tem_api_get "softwaretitles/${title_id}") || return 1
+  title_name=$(echo "$title_data" | awk '/"name"/{gsub(/.*"name": "|",?.*$/, "", $0); print; exit}')
+  [[ -z "$title_name" ]] && title_name="${TEM_CLI_TITLE_NAME:-Title ${title_id}}"
+
+  local batch_versions
+  batch_versions=$(_tem_collect_batch_versions_for_title "$TEM_CLI_BATCH_FILE" "$title_id" "$title_name")
+  if [[ -z "$batch_versions" ]]; then
+    echo "ERROR: No matching versions found in batch for title '${title_name}' (ID: ${title_id})." >&2
+    echo "       Ensure the batch rows include this exact title name or title ID." >&2
+    return 1
+  fi
+
+  local remove_list
+  remove_list=$(python3 - <<'PY' "$title_data"
+import json
+import sys
+
+raw = sys.argv[1]
+try:
+    data = json.loads(raw)
+except Exception:
+    sys.exit(0)
+
+for patch in (data.get("patches") or []):
+    if not isinstance(patch, dict):
+        continue
+    version = str(patch.get("version") or "").strip()
+    patch_id = patch.get("patchId") or patch.get("id") or patch.get("softwarePatchId")
+    if not version or patch_id is None:
+        continue
+    print(f"{patch_id}\t{version}")
+PY
+)
+
+  local to_delete=""
+  local line patch_id version
+  while IFS= read -r line; do
+    [[ -z "$line" ]] && continue
+    patch_id="${line%%$'\t'*}"
+    version="${line#*$'\t'}"
+    if ! printf '%s\n' "$batch_versions" | grep -Fqx "$version"; then
+      to_delete+="${patch_id}"$'\t'"${version}"$'\n'
+    fi
+  done <<< "$remove_list"
+
+  if [[ -z "${to_delete//[[:space:]]/}" ]]; then
+    echo "Sync check complete: no extra versions to delete for ${title_name} (ID: ${title_id})."
+    return 0
+  fi
+
+  local delete_count
+  delete_count=$(printf '%s' "$to_delete" | sed '/^$/d' | wc -l | tr -d ' ')
+
+  echo ""
+  _tem_header "Sync From Batch — ${title_name}"
+  echo "Batch source: ${TEM_CLI_BATCH_FILE}"
+  echo "Will delete versions NOT present in batch:"
+  printf '%s' "$to_delete" | awk -F'\t' '{ printf "  - patchId=%s version=%s\n", $1, $2 }'
+
+  if [[ "$TEM_CLI_DRY_RUN" == "true" ]]; then
+    echo ""
+    echo "DRY-RUN: would delete ${delete_count} patch(es) and resequence title ID ${title_id}."
+    return 0
+  fi
+
+  if [[ "$TEM_CLI_YES" != "true" ]]; then
+    if [[ ! -r /dev/tty ]]; then
+      echo "ERROR: Confirmation required but no interactive TTY available. Re-run with --yes." >&2
+      return 1
+    fi
+    local confirm
+    read -r -p "Delete these ${delete_count} patch(es)? [yes/no]: " confirm < /dev/tty
+    if [[ "$(echo "$confirm" | tr '[:upper:]' '[:lower:]')" != "yes" ]]; then
+      echo "Cancelled."
+      return 1
+    fi
+  fi
+
+  local deleted=0
+  local failed=0
+  while IFS=$'\t' read -r patch_id version; do
+    [[ -z "$patch_id" ]] && continue
+    if _tem_api_delete "patches/${patch_id}" >/dev/null 2>/dev/null; then
+      ((deleted++))
+      echo "Deleted patchId=${patch_id} version=${version}"
+    else
+      ((failed++))
+      echo "Failed delete patchId=${patch_id} version=${version}" >&2
+    fi
+  done <<< "$to_delete"
+
+  if [[ "$deleted" -gt 0 ]]; then
+    if _tem_resequence_title_by_id "$title_id"; then
+      echo "Resequence complete for title ID ${title_id}."
+    else
+      ((failed++))
+      echo "Resequence failed for title ID ${title_id}." >&2
+    fi
+  fi
+
+  echo "Sync complete: deleted=${deleted}, failed=${failed}"
+  [[ "$failed" -eq 0 ]]
+}
+
 # Patch detail submenu
 _tem_patch_menu() {
   local data="$1"
@@ -2994,6 +3220,11 @@ if [[ "${BASH_SOURCE[0]:-}" == "${0}" ]]; then
 
   if [[ "$TEM_CLI_MODE" == "cleanup-non-semver" ]]; then
     _tem_run_cleanup_non_semver_cli
+    exit $?
+  fi
+
+  if [[ "$TEM_CLI_MODE" == "sync-from-batch" ]]; then
+    _tem_run_sync_from_batch_cli
     exit $?
   fi
 

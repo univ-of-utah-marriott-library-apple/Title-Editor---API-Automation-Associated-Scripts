@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 #
 # Build Title Editor Batch File from GitHub Repository
-# Version: 1.8.5
-# Revised: 2026.03.25
+# Version: 1.8.9
+# Revised: 2026.04.10
 #
 # Generates short-format batch file for title_editor_menu.sh --add-patch-batch.
 # Output format:
@@ -23,7 +23,7 @@
 
 set -euo pipefail
 
-SCRIPT_VERSION="1.8.5"
+SCRIPT_VERSION="1.8.9"
 DEBUG_MODE=false
 INCLUDE_PRERELEASE=false
 GITHUB_CONNECT_TIMEOUT="${GITHUB_CONNECT_TIMEOUT:-15}"
@@ -300,13 +300,17 @@ extract_versions_from_json() {
   json_file=$(mktemp /tmp/title_editor_github_json.XXXXXX)
   cat > "$json_file"
 
-  python3 - "$key" "$source_kind" "$json_file" <<'PY'
+python3 - "$key" "$source_kind" "$json_file" <<'PY'
 import json
+import re
 import sys
 
 key = sys.argv[1]
 source_kind = sys.argv[2]
 json_file = sys.argv[3]
+keys = [k.strip() for k in key.split(",") if k.strip()]
+if not keys:
+    keys = [key]
 
 try:
   with open(json_file, 'r', encoding='utf-8') as fh:
@@ -331,16 +335,24 @@ if isinstance(data, dict):
 for item in data:
     if not isinstance(item, dict):
         continue
-    tag = str(item.get(key, "")).strip()
+    tag = ""
+    fallback = ""
+    for candidate_key in keys:
+        raw = str(item.get(candidate_key, "")).strip()
+        if not raw:
+            continue
+        if re.match(r'^[vV]\d', raw):
+            raw = raw[1:]
+        raw = re.sub(r'^(?i:version)[\s._-]*', '', raw).strip()
+        if not raw:
+            continue
+        if not fallback:
+            fallback = raw
+        if re.search(r'[0-9]+(?:\.[0-9]+){1,3}', raw):
+            tag = raw
+            break
     if not tag:
-        continue
-    # Normalize common version prefixes safely.
-    # - Strip v/V only when followed by a digit (e.g. v1.2.3 -> 1.2.3)
-    # - Strip "version-" prefix (e.g. Version-3.14.1 -> 3.14.1)
-    if re.match(r'^[vV]\d', tag):
-        tag = tag[1:]
-    tag = re.sub(r'^(?i:version)[\s._-]*', '', tag)
-    tag = tag.strip()
+        tag = fallback
     if not tag or tag in seen:
         continue
     seen.add(tag)
@@ -430,10 +442,19 @@ for raw in rows:
     if re.match(r'^[vV]\d', normalized):
         normalized = normalized[1:]
 
-    match = re.search(r'([0-9]+(?:\.[0-9]+){1,3})', normalized)
-    if not match:
+    core_match = re.search(r'([0-9]+(?:\.[0-9]+){1,3})', normalized)
+    if not core_match:
         continue
-    normalized = match.group(1)
+
+    if include_prerelease:
+        pre_match = re.search(
+            r'([0-9]+(?:\.[0-9]+){1,3}(?:[-._]?(?:alpha|beta|rc|dev)[0-9]*|[bd][0-9]+)?)',
+            normalized,
+            flags=re.IGNORECASE,
+        )
+        normalized = pre_match.group(1) if pre_match else core_match.group(1)
+    else:
+        normalized = core_match.group(1)
 
     if normalized in seen:
         continue
@@ -446,7 +467,13 @@ PY
 
 is_numeric_semver_like() {
   local version="$1"
-  [[ "$version" =~ ^[0-9]+(\.[0-9]+){1,3}$ ]]
+  if [[ "${INCLUDE_PRERELEASE:-false}" == "true" ]]; then
+    local v_lower
+    v_lower=$(printf '%s' "$version" | tr '[:upper:]' '[:lower:]')
+    [[ "$v_lower" =~ ^[0-9]+(\.[0-9]+){1,3}([-._]?(alpha|beta|rc|dev)[0-9]*|[bd][0-9]+)?$ ]]
+  else
+    [[ "$version" =~ ^[0-9]+(\.[0-9]+){1,3}$ ]]
+  fi
 }
 
 collect_non_semver_versions() {
@@ -1067,7 +1094,7 @@ main() {
   if [[ "$source_mode" == "releases" || "$source_mode" == "auto" ]]; then
     log_info "Fetching GitHub releases..."
     : > "$err_file"
-    if versions_text=$(fetch_versions_paginated "$repo" "releases" "tag_name" 2>"$err_file"); then
+    if versions_text=$(fetch_versions_paginated "$repo" "releases" "tag_name,name" 2>"$err_file"); then
       if [[ -z "$versions_text" ]]; then
         debug_log "releases contained no usable versions"
       fi
@@ -1134,6 +1161,11 @@ main() {
   if [[ "$has_mac_prefix" == "true" && -z "$versions_text" ]]; then
     log_warn "Tag filter: mac-prefixed tags yielded no usable versions; retrying with plain tags."
     versions_text=$(printf '%s\n' "$raw_versions_text" | filter_versions "$INCLUDE_PRERELEASE" "false" || true)
+  fi
+
+  # Ensure output order is newest to oldest (semantic version order).
+  if [[ -n "$versions_text" ]]; then
+    versions_text=$(printf '%s\n' "$versions_text" | sort -V -r)
   fi
 
   local versions=()

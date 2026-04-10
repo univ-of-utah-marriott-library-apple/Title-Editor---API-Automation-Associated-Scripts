@@ -270,7 +270,7 @@ configure_item() {
       ITEM_NAME="draw.io"
       TITLE_NAME="draw.io"
       VERSION_METHOD="GITHUB"
-      SOURCE_REPO="jgraph/drawio-desktop"
+      SOURCE_REPO="jgraph/drawio"
       SOURCE_MODE="auto"
       ;;
 
