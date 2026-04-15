@@ -7,6 +7,7 @@
   - [Installation and Setup](#installation-and-setup)
   - [Quick Start](#quick-start)
   - [Script Reference](#script-reference)
+  - [AutoPkg Handoff Workflow (Generic Recipe)](#autopkg-handoff-workflow-generic-recipe)
   - [Workflow: Title Editor with Jamf Pro Patch Management](#workflow-title-editor-with-jamf-pro-patch-management)
   - [Installomator: Patch Compliance for Open-Source and Common Applications](#installomator-patch-compliance-for-open-source-and-common-applications)
   - [Restricted and Campus-Only Applications](#restricted-and-campus-only-applications)
@@ -590,6 +591,50 @@ bash ~/title_editor/update_title_editor_versions.sh \
 - Supports one-item or all-item runs.
 - Maintains per-item/version state keys.
 - Integrates with existing batch builder scripts and Title Editor import flow.
+
+#### AutoPkg Handoff Workflow (Generic Recipe)
+
+Use this when AutoPkg should remain the upstream "new version available" signal, while `update_title_editor_versions.sh` handles Title Editor import/state behavior.
+
+Direct handoff pattern:
+
+```bash
+# 1) Current-version signal only (no import/state write)
+autopkg run Firefox.munki && \
+bash ~/title_editor/update_title_editor_versions.sh --item firefox --current-only --no-import --no-apply
+
+# 2) Trigger one new Title Editor version when source reports newer
+autopkg run Firefox.munki && \
+bash ~/title_editor/update_title_editor_versions.sh --item firefox --current-only
+```
+
+Reusable AutoPkg implementation (in the general-scripts repository):
+
+- `autopkg/processors/TitleEditorAutoPkgHandoff.py`
+- `autopkg/recipes/TitleEditorAutoPkgHandoff.recipe`
+
+Recipe run examples:
+
+```bash
+# 1) Current-version signal only (no import/state write)
+autopkg run /path/to/general-scripts/autopkg/recipes/TitleEditorAutoPkgHandoff.recipe \
+  -k SOURCE_RECIPE=Firefox.munki \
+  -k TITLE_EDITOR_ITEM=firefox \
+  -k HANDOFF_MODE=signal-only
+
+# 2) Trigger one new Title Editor version when source reports newer
+autopkg run /path/to/general-scripts/autopkg/recipes/TitleEditorAutoPkgHandoff.recipe \
+  -k SOURCE_RECIPE=Firefox.munki \
+  -k TITLE_EDITOR_ITEM=firefox \
+  -k HANDOFF_MODE=apply-current
+```
+
+Recipe inputs:
+
+- `SOURCE_RECIPE` (example: `Firefox.munki`)
+- `TITLE_EDITOR_ITEM` (example: `firefox`)
+- `HANDOFF_MODE` (`signal-only` or `apply-current`)
+- Optional: `AUTOPKG_RUN_ARGS`, `TITLE_EDITOR_EXTRA_ARGS`, `UPDATE_SCRIPT_PATH`, `AUTOPKG_CMD`
 
 ---
 
