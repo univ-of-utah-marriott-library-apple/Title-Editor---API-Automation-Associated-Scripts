@@ -2,142 +2,20 @@
 
 ## Table of Contents
 
-- [Release Notes Update (2026-04-15)](#release-notes-update-2026-04-15)
-- [Release Notes Update (2026-04-06)](#release-notes-update-2026-04-06)
-- [Release Notes Update (2026-04-03)](#release-notes-update-2026-04-03)
-- [Introduction and Background](#introduction-and-background)
-- [Installation and Setup](#installation-and-setup)
-- [Quick Start](#quick-start)
-- [Script Reference](#script-reference)
-- [Workflow: Title Editor with Jamf Pro Patch Management](#workflow-title-editor-with-jamf-pro-patch-management)
-- [Installomator: Patch Compliance for Open-Source and Common Applications](#installomator-patch-compliance-for-open-source-and-common-applications)
-- [Restricted and Campus-Only Applications](#restricted-and-campus-only-applications)
-- [Mac App Store Applications — Repackaging and Post-Install Automation](#mac-app-store-applications--repackaging-and-post-install-automation)
-- [Quick Reference](#quick-reference)
-
----
-
-## Release Notes Update (2026-04-15)
-
-### Summary (2026-04-15)
-
-- Updated `title_editor_menu.sh` to improve interactive menu reliability and API workflow integration.
-- Improved reconnect behavior after token expiration during menu-driven operations.
-- Improved Keychain-assisted login fallback behavior for mixed interactive/CLI usage.
-- Refined prompts and guidance to reduce user-specific absolute path assumptions.
-
-### Scripts included in this update (2026-04-15)
-
-- `title_editor_menu.sh`
-
-### Notes for reviewers (2026-04-15)
-
-- Validate interactive login and menu navigation from a clean shell session.
-- Validate token-expiration recovery by running a menu action after token timeout.
-- Validate non-interactive CLI usage still works for `--add-patch`, `--add-patch-batch`, and `--create-title` paths.
-
----
-
-## Release Notes Update (2026-04-06)
-
-### Summary
-
-- Added `setup_jamf_pro_credentials.sh` into the documented toolkit and sync scope.
-- Expanded README coverage to include Jamf Pro credential setup/verification flows.
-- Added Quick Start example for Jamf Patch catalog-driven title initialization.
-- Added Script Reference entries for newer helper/orchestration scripts.
-- Updated command quick-reference rows to include Jamf Pro credential operations.
-
-### Scripts emphasized in this update
-
-- `setup_jamf_pro_credentials.sh`
-- `build_title_editor_batch_from_jamf_patch_catalog.sh`
-- `title_editor_software_title_defaults_from_user_prompt.sh`
-- `update_title_editor_versions.sh`
-
-### Notes for reviewers
-
-- Ensure `setup_jamf_pro_credentials.sh` is present in the repository before release.
-- Verify Keychain-backed credential workflows on a standard user account.
-- Verify Jamf Patch catalog batch generation using both `--source public` and `--source jamf-pro` as needed for your environment.
-
----
-
-## Release Notes Update (2026-04-03)
-
-### Scripts included in this update
-
-- `build_title_editor_batch_from_github.sh`
-- `build_title_editor_batch_from_jamf_patch_catalog.sh`
-- `build_title_editor_batch_from_release_notes.sh`
-- `setup_jamf_pro_credentials.sh`
-- `setup_title_editor_credentials.sh`
-- `title_editor_api_ctrl.sh`
-- `title_editor_menu.sh`
-- `title_editor_software_title_defaults_from_user_prompt.sh`
-- `update_title_editor_versions.sh`
-
-### Why `build_title_editor_batch_from_jamf_patch_catalog.sh` exists
-
-`build_title_editor_batch_from_jamf_patch_catalog.sh` primarily exists to help resolve Jamf Patch Extension Attribute (EA) issues where applications are installed in a sub-folder under `/Applications` (for example `/Applications/Web Browsers`).
-
-Example Jamf Patch EA for Opera:
-
-```sh
-#!/bin/bash
-####################################################
-# A script to collect the Bundle Version of Opera. #
-####################################################
-PATH_EXPR=(/Applications/*/Contents/MacOS/Opera)
-KEY="CFBundleVersion"
-IFS=$'\n'
-unset RESULTS
-for BINARY in "${PATH_EXPR[@]}"; do
-    PLIST=$(/usr/bin/dirname "${BINARY}")/../Info.plist
-    VERSION=$(/usr/bin/defaults read "${PLIST}" "${KEY}" 2>/dev/null)
-    if [ -n "${VERSION}" ] ; then
-        RESULTS+=("${VERSION}")
-    fi
-done
-unset IFS
-if [ ${#RESULTS[*]} -eq 0 ]; then
-    /bin/echo "<result></result>"
-else
-    IFS="|"
-    /bin/echo "<result>|${RESULTS[*]}|</result>"
-    unset IFS
-fi
-exit 0
-```
-
-Needed EA in Title Editor context (specific subfolder + bundle ID check):
-
-```sh
-#!/bin/sh
-####################################################
-# A script to collect the Bundle Version of Opera. #
-####################################################
-PATH_EXPR="/Applications/Web\ Browsers/*/Contents/MacOS/Opera"
-BUNDLE_ID="com.operasoftware.Opera"
-KEY="CFBundleVersion"
-RESULTS=()
-IFS=$'\n'
-for BINARY in ${PATH_EXPR}; do
-    PLIST="$(/usr/bin/dirname "${BINARY}")/../Info.plist"
-    if [ "$(/usr/bin/defaults read "${PLIST}" CFBundleIdentifier 2>/dev/null)" == "${BUNDLE_ID}" ]; then
-        RESULTS+=($(/usr/bin/defaults read "${PLIST}" "${KEY}" 2>/dev/null))
-    fi
-done
-unset IFS
-if [ ${#RESULTS[@]} -eq 0 ]; then
-    /bin/echo "<result></result>"
-else
-    IFS="|"
-    /bin/echo "<result>${RESULTS[*]}</result>"
-    unset IFS
-fi
-exit 0
-```
+- Main Guide
+  - [Introduction and Background](#introduction-and-background)
+  - [Installation and Setup](#installation-and-setup)
+  - [Quick Start](#quick-start)
+  - [Script Reference](#script-reference)
+  - [Workflow: Title Editor with Jamf Pro Patch Management](#workflow-title-editor-with-jamf-pro-patch-management)
+  - [Installomator: Patch Compliance for Open-Source and Common Applications](#installomator-patch-compliance-for-open-source-and-common-applications)
+  - [Restricted and Campus-Only Applications](#restricted-and-campus-only-applications)
+  - [Mac App Store Applications — Repackaging and Post-Install Automation](#mac-app-store-applications--repackaging-and-post-install-automation)
+  - [Quick Reference](#quick-reference)
+- Release Notes
+  - [Release Notes Update (2026-04-15)](#release-notes-update-2026-04-15)
+  - [Release Notes Update (2026-04-06)](#release-notes-update-2026-04-06)
+  - [Release Notes Update (2026-04-03)](#release-notes-update-2026-04-03)
 
 ---
 
@@ -1078,3 +956,127 @@ bash ~/title_editor/title_editor_menu.sh \
 | `TEM_RECONNECT_TIMEOUT` | Timeout for token-refresh reconnect attempts (default 20s). |
 | `TEM_TITLE_UPDATE_TIMEOUT` | Timeout for the `currentVersion` PATCH call after patch creation (default 20s). |
 | `TEM_AUTO_RESEQUENCE_ON_CHANGE` | Set to `false` to disable automatic patch resequencing after batch operations. |
+
+---
+
+## Release Notes Update (2026-04-15)
+
+### Summary (2026-04-15)
+
+- Updated `title_editor_menu.sh` to improve interactive menu reliability and API workflow integration.
+- Improved reconnect behavior after token expiration during menu-driven operations.
+- Improved Keychain-assisted login fallback behavior for mixed interactive/CLI usage.
+- Refined prompts and guidance to reduce user-specific absolute path assumptions.
+
+### Scripts included in this update (2026-04-15)
+
+- `title_editor_menu.sh`
+
+### Notes for reviewers (2026-04-15)
+
+- Validate interactive login and menu navigation from a clean shell session.
+- Validate token-expiration recovery by running a menu action after token timeout.
+- Validate non-interactive CLI usage still works for `--add-patch`, `--add-patch-batch`, and `--create-title` paths.
+
+---
+
+## Release Notes Update (2026-04-06)
+
+### Summary
+
+- Added `setup_jamf_pro_credentials.sh` into the documented toolkit and sync scope.
+- Expanded README coverage to include Jamf Pro credential setup/verification flows.
+- Added Quick Start example for Jamf Patch catalog-driven title initialization.
+- Added Script Reference entries for newer helper/orchestration scripts.
+- Updated command quick-reference rows to include Jamf Pro credential operations.
+
+### Scripts emphasized in this update
+
+- `setup_jamf_pro_credentials.sh`
+- `build_title_editor_batch_from_jamf_patch_catalog.sh`
+- `title_editor_software_title_defaults_from_user_prompt.sh`
+- `update_title_editor_versions.sh`
+
+### Notes for reviewers
+
+- Ensure `setup_jamf_pro_credentials.sh` is present in the repository before release.
+- Verify Keychain-backed credential workflows on a standard user account.
+- Verify Jamf Patch catalog batch generation using both `--source public` and `--source jamf-pro` as needed for your environment.
+
+---
+
+## Release Notes Update (2026-04-03)
+
+### Scripts included in this update
+
+- `build_title_editor_batch_from_github.sh`
+- `build_title_editor_batch_from_jamf_patch_catalog.sh`
+- `build_title_editor_batch_from_release_notes.sh`
+- `setup_jamf_pro_credentials.sh`
+- `setup_title_editor_credentials.sh`
+- `title_editor_api_ctrl.sh`
+- `title_editor_menu.sh`
+- `title_editor_software_title_defaults_from_user_prompt.sh`
+- `update_title_editor_versions.sh`
+
+### Why `build_title_editor_batch_from_jamf_patch_catalog.sh` exists
+
+`build_title_editor_batch_from_jamf_patch_catalog.sh` primarily exists to help resolve Jamf Patch Extension Attribute (EA) issues where applications are installed in a sub-folder under `/Applications` (for example `/Applications/Web Browsers`).
+
+Example Jamf Patch EA for Opera:
+
+```sh
+#!/bin/bash
+####################################################
+# A script to collect the Bundle Version of Opera. #
+####################################################
+PATH_EXPR=(/Applications/*/Contents/MacOS/Opera)
+KEY="CFBundleVersion"
+IFS=$'\n'
+unset RESULTS
+for BINARY in "${PATH_EXPR[@]}"; do
+  PLIST=$(/usr/bin/dirname "${BINARY}")/../Info.plist
+  VERSION=$(/usr/bin/defaults read "${PLIST}" "${KEY}" 2>/dev/null)
+  if [ -n "${VERSION}" ] ; then
+    RESULTS+=("${VERSION}")
+  fi
+done
+unset IFS
+if [ ${#RESULTS[*]} -eq 0 ]; then
+  /bin/echo "<result></result>"
+else
+  IFS="|"
+  /bin/echo "<result>|${RESULTS[*]}|</result>"
+  unset IFS
+fi
+exit 0
+```
+
+Needed EA in Title Editor context (specific subfolder + bundle ID check):
+
+```sh
+#!/bin/sh
+####################################################
+# A script to collect the Bundle Version of Opera. #
+####################################################
+PATH_EXPR="/Applications/Web\ Browsers/*/Contents/MacOS/Opera"
+BUNDLE_ID="com.operasoftware.Opera"
+KEY="CFBundleVersion"
+RESULTS=()
+IFS=$'\n'
+for BINARY in ${PATH_EXPR}; do
+  PLIST="$(/usr/bin/dirname "${BINARY}")/../Info.plist"
+  if [ "$(/usr/bin/defaults read "${PLIST}" CFBundleIdentifier 2>/dev/null)" == "${BUNDLE_ID}" ]; then
+    RESULTS+=($(/usr/bin/defaults read "${PLIST}" "${KEY}" 2>/dev/null))
+  fi
+done
+unset IFS
+if [ ${#RESULTS[@]} -eq 0 ]; then
+  /bin/echo "<result></result>"
+else
+  IFS="|"
+  /bin/echo "<result>${RESULTS[*]}</result>"
+  unset IFS
+fi
+exit 0
+```
