@@ -593,7 +593,7 @@ bash ~/title_editor/update_title_editor_versions.sh \
 - Maintains per-item/version state keys.
 - Integrates with existing batch builder scripts and Title Editor import flow.
 
-#### AutoPkg Handoff Workflow (Generic Recipe)
+#### AutoPkg Handoff Workflow
 
 Use this when AutoPkg should remain the upstream "new version available" signal, while `update_title_editor_versions.sh` handles Title Editor import/state behavior.
 
@@ -618,13 +618,13 @@ Recipe run examples:
 
 ```bash
 # 1) Current-version signal only (no import/state write)
-autopkg run /path/to/general-scripts/autopkg/recipes/TitleEditorAutoPkgHandoff.recipe \
+autopkg run /path/to/autopkg/recipes/TitleEditorAutoPkgHandoff.recipe \
   -k SOURCE_RECIPE=Firefox.munki \
   -k TITLE_EDITOR_ITEM=firefox \
   -k HANDOFF_MODE=signal-only
 
 # 2) Trigger one new Title Editor version when source reports newer
-autopkg run /path/to/general-scripts/autopkg/recipes/TitleEditorAutoPkgHandoff.recipe \
+autopkg run /path/to/autopkg/recipes/TitleEditorAutoPkgHandoff.recipe \
   -k SOURCE_RECIPE=Firefox.munki \
   -k TITLE_EDITOR_ITEM=firefox \
   -k HANDOFF_MODE=apply-current
