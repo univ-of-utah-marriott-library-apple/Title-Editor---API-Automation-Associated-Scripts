@@ -609,7 +609,7 @@ autopkg run Firefox.munki && \
 bash ~/title_editor/update_title_editor_versions.sh --item firefox --current-only
 ```
 
-Reusable AutoPkg implementation (in the general-scripts repository):
+Reusable AutoPkg implementation (in the repository):
 
 - `autopkg/processors/TitleEditorAutoPkgHandoff.py`
 - `autopkg/recipes/TitleEditorAutoPkgHandoff.recipe`
