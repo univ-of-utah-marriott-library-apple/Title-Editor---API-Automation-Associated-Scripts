@@ -2,6 +2,7 @@
 
 ## Table of Contents
 
+- [Release Notes Update (2026-04-15)](#release-notes-update-2026-04-15)
 - [Release Notes Update (2026-04-06)](#release-notes-update-2026-04-06)
 - [Release Notes Update (2026-04-03)](#release-notes-update-2026-04-03)
 - [Introduction and Background](#introduction-and-background)
@@ -13,6 +14,27 @@
 - [Restricted and Campus-Only Applications](#restricted-and-campus-only-applications)
 - [Mac App Store Applications — Repackaging and Post-Install Automation](#mac-app-store-applications--repackaging-and-post-install-automation)
 - [Quick Reference](#quick-reference)
+
+---
+
+## Release Notes Update (2026-04-15)
+
+### Summary (2026-04-15)
+
+- Updated `title_editor_menu.sh` to improve interactive menu reliability and API workflow integration.
+- Improved reconnect behavior after token expiration during menu-driven operations.
+- Improved Keychain-assisted login fallback behavior for mixed interactive/CLI usage.
+- Refined prompts and guidance to reduce user-specific absolute path assumptions.
+
+### Scripts included in this update (2026-04-15)
+
+- `title_editor_menu.sh`
+
+### Notes for reviewers (2026-04-15)
+
+- Validate interactive login and menu navigation from a clean shell session.
+- Validate token-expiration recovery by running a menu action after token timeout.
+- Validate non-interactive CLI usage still works for `--add-patch`, `--add-patch-batch`, and `--create-title` paths.
 
 ---
 

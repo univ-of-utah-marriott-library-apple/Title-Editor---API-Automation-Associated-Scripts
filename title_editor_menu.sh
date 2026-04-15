@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 #
 # Title Editor API Interactive Menu
-# Version: 1.5.7
-# Revised: 2026.04.10
+# Version: 1.5.8
+# Revised: 2026.04.14
 #
 # Provides an interactive command-line menu to browse and view software titles from the Jamf Title Editor API.
 # Also supports programmatic patch creation via CLI flags and batch files.
@@ -53,7 +53,7 @@
 # permission. This software is supplied as is without expressed or
 # implied warranties of any kind.
 
-script_version="1.5.7"
+script_version="1.5.8"
 TEM_DEBUG_CREDENTIALS="${TITLE_EDITOR_MENU_DEBUG:-false}"
 TEM_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
@@ -1581,19 +1581,83 @@ _tem_select_title() {
 # Show extension attributes for a title
 _tem_show_extension_attributes() {
   local data="$1"
+  local tmp_json=""
   _tem_header "Extension Attributes — ${TEM_TITLE_NAME}"
 
-  local ea
-  ea=$(echo "$data" | awk '
-    /"extensionAttributes"/ { in_ea=1 }
-    in_ea { print }
-  ')
+  tmp_json=$(mktemp /tmp/tem_ea_json.XXXXXX)
+  printf '%s' "$data" > "$tmp_json"
 
-  if echo "$ea" | grep -q '\[\]'; then
-    echo "  No extension attributes defined."
-  else
-    echo "$ea" | grep -E '"name"|"value"|"type"' | sed 's/^[[:space:]]*/  /'
-  fi
+  python3 - "$tmp_json" <<'PY'
+import base64
+import json
+import re
+import sys
+
+raw = ""
+if len(sys.argv) > 1:
+    try:
+        with open(sys.argv[1], "r", encoding="utf-8") as fh:
+            raw = fh.read()
+    except Exception as exc:
+        print(f"  Unable to read title JSON temp file: {exc}")
+        raise SystemExit(0)
+
+try:
+    payload = json.loads(raw)
+except Exception as exc:
+    print(f"  Unable to parse title JSON: {exc}")
+    raise SystemExit(0)
+
+eas = payload.get("extensionAttributes") or []
+if not eas:
+    print("  No extension attributes defined.")
+    raise SystemExit(0)
+
+def maybe_decode_base64_text(value: str):
+    candidate = value.strip()
+    if not candidate:
+        return None
+    if len(candidate) < 16 or len(candidate) % 4 != 0:
+        return None
+    if not re.fullmatch(r"[A-Za-z0-9+/=]+", candidate):
+        return None
+    try:
+        decoded = base64.b64decode(candidate, validate=True)
+        text = decoded.decode("utf-8")
+    except Exception:
+        return None
+
+    printable = sum(1 for ch in text if ch.isprintable() or ch in "\r\n\t")
+    ratio = printable / max(1, len(text))
+    if ratio < 0.90:
+        return None
+    if not ("\n" in text or text.startswith("#!")):
+        return None
+    return text
+
+for idx, ea in enumerate(eas, start=1):
+    name = str(ea.get("name", ""))
+    ea_type = str(ea.get("type", ""))
+    value = ea.get("value", "")
+    if value is None:
+        value = ""
+    if not isinstance(value, str):
+        value = json.dumps(value, separators=(",", ":"))
+
+    print(f"  [{idx}] Name: {name}")
+    if ea_type:
+        print(f"      Type: {ea_type}")
+
+    decoded_value = maybe_decode_base64_text(value)
+    if decoded_value is not None:
+        print("      Value: [base64-decoded text]")
+        for line in decoded_value.splitlines():
+            print(f"        {line}")
+    else:
+        print(f"      Value: {value}")
+    print("")
+PY
+  rm -f "$tmp_json" >/dev/null 2>&1 || true
   _tem_pause
 }
 
