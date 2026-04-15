@@ -14,6 +14,7 @@
   - [Mac App Store Applications — Repackaging and Post-Install Automation](#mac-app-store-applications--repackaging-and-post-install-automation)
   - [Quick Reference](#quick-reference)
 - Release Notes
+  - [Release Notes Update (2026-04-15, Later)](#release-notes-update-2026-04-15-later)
   - [Release Notes Update (2026-04-15)](#release-notes-update-2026-04-15)
   - [Release Notes Update (2026-04-06)](#release-notes-update-2026-04-06)
   - [Release Notes Update (2026-04-03)](#release-notes-update-2026-04-03)
@@ -1001,6 +1002,29 @@ bash ~/title_editor/title_editor_menu.sh \
 | `TEM_RECONNECT_TIMEOUT` | Timeout for token-refresh reconnect attempts (default 20s). |
 | `TEM_TITLE_UPDATE_TIMEOUT` | Timeout for the `currentVersion` PATCH call after patch creation (default 20s). |
 | `TEM_AUTO_RESEQUENCE_ON_CHANGE` | Set to `false` to disable automatic patch resequencing after batch operations. |
+
+---
+
+## Release Notes Update (2026-04-15, Later)
+
+### Summary (2026-04-15, Later)
+
+- Added a reusable AutoPkg handoff processor to run an upstream recipe and then trigger `update_title_editor_versions.sh`.
+- Added a generic AutoPkg recipe wrapper for handoff flow reuse via `SOURCE_RECIPE`, `TITLE_EDITOR_ITEM`, and `HANDOFF_MODE`.
+- Updated `update_title_editor_versions.sh` with AutoPkg handoff examples and current-only handoff guidance.
+- Sync summary for this update: Added files `2`, Updated files `1`, Unchanged files `8`, Target-only files `0`.
+
+### Scripts included in this update (2026-04-15, Later)
+
+- `autopkg/processors/TitleEditorAutoPkgHandoff.py`
+- `autopkg/recipes/TitleEditorAutoPkgHandoff.recipe`
+- `update_title_editor_versions.sh`
+
+### Notes for reviewers (2026-04-15, Later)
+
+- Validate `HANDOFF_MODE=signal-only` runs upstream AutoPkg recipe and passes `--no-import --no-apply`.
+- Validate `HANDOFF_MODE=apply-current` runs upstream AutoPkg recipe and triggers one current-only Title Editor update path.
+- Validate README examples align with the generic AutoPkg recipe usage and input keys.
 
 ---
 
