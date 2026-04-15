@@ -23,6 +23,15 @@ set -euo pipefail
 #   bash update_title_editor_versions.sh --channel beta --dry-run
 #   bash update_title_editor_versions.sh --item title-editor --no-import
 #
+# AutoPkg handoff examples:
+#   # 1) Current-version signal only (no import/state write)
+#   autopkg run Firefox.munki && \
+#   bash update_title_editor_versions.sh --item firefox --current-only --no-import --no-apply
+#
+#   # 2) Trigger one new Title Editor version when source reports newer
+#   autopkg run Firefox.munki && \
+#   bash update_title_editor_versions.sh --item firefox --current-only
+#
 # Copyright (c) 2026 University of Utah, Marriott Library IT.
 # All Rights Reserved.
 #
@@ -201,6 +210,20 @@ Notes:
     - stable  : excludes prerelease
     - beta    : includes prerelease
     - nightly : includes prerelease
+  - AutoPkg can be used as an upstream "new version detected" signal.
+    Common pattern:
+    1) Run an AutoPkg recipe for the app.
+    2) Run this wrapper with --item <key> --current-only.
+    3) Add --no-import --no-apply for signal-only checks.
+
+AutoPkg examples:
+  # Current-version signal only (no import/state write)
+  autopkg run Firefox.munki && \
+  bash update_title_editor_versions.sh --item firefox --current-only --no-import --no-apply
+
+  # Trigger one new Title Editor version when source reports newer
+  autopkg run Firefox.munki && \
+  bash update_title_editor_versions.sh --item firefox --current-only
 EOF
 }
 
