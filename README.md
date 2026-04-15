@@ -8,12 +8,14 @@
   - [Quick Start](#quick-start)
   - [Script Reference](#script-reference)
   - [AutoPkg Handoff Workflow](#autopkg-handoff-workflow)
+  - [Installomator Handoff Helper](#installomator-handoff-helper)
   - [Workflow: Title Editor with Jamf Pro Patch Management](#workflow-title-editor-with-jamf-pro-patch-management)
   - [Installomator: Patch Compliance for Open-Source and Common Applications](#installomator-patch-compliance-for-open-source-and-common-applications)
   - [Restricted and Campus-Only Applications](#restricted-and-campus-only-applications)
   - [Mac App Store Applications — Repackaging and Post-Install Automation](#mac-app-store-applications--repackaging-and-post-install-automation)
   - [Quick Reference](#quick-reference)
 - Release Notes
+  - [Release Notes Update (2026-04-15, Later-Later)](#release-notes-update-2026-04-15-later-later)
   - [Release Notes Update (2026-04-15, Later)](#release-notes-update-2026-04-15-later)
   - [Release Notes Update (2026-04-15)](#release-notes-update-2026-04-15)
   - [Release Notes Update (2026-04-06)](#release-notes-update-2026-04-06)
@@ -637,6 +639,95 @@ Recipe inputs:
 - `HANDOFF_MODE` (`signal-only` or `apply-current`)
 - Optional: `AUTOPKG_RUN_ARGS`, `TITLE_EDITOR_EXTRA_ARGS`, `UPDATE_SCRIPT_PATH`, `AUTOPKG_CMD`
 
+#### Installomator Handoff Helper
+
+Use `installomator/installomator_handoff.sh` when Installomator is your upstream installer/update action and you want Title Editor to update only when Installomator indicates a real install/update occurred.
+
+Script location:
+
+- `installomator/installomator_handoff.sh`
+
+Local script usage:
+
+```bash
+# Signal-only handoff (no import/state write), only when Installomator updated
+bash ~/title_editor/installomator/installomator_handoff.sh \
+  --label firefox \
+  --item firefox \
+  --handoff-mode signal-only
+
+# Apply-current handoff
+bash ~/title_editor/installomator/installomator_handoff.sh \
+  --label firefox \
+  --item firefox \
+  --handoff-mode apply-current
+```
+
+When Installomator is uploaded to Jamf Pro and run via policy:
+
+```bash
+#!/bin/bash
+set -euo pipefail
+
+# Jamf Script Parameters:
+#   $4 = Installomator label (example: firefox)
+#   $5 = Title Editor item key (optional; defaults to label)
+#   $6 = handoff mode: signal-only|apply-current (optional; default signal-only)
+#   $7 = extra Installomator args (optional)
+
+HANDOFF_SCRIPT="/usr/local/title_editor/installomator/installomator_handoff.sh"
+INSTALLOMATOR_SCRIPT="/usr/local/Installomator/Installomator.sh"
+
+label="${4:-firefox}"
+item="${5:-$label}"
+mode="${6:-signal-only}"
+extra_args="${7:-BLOCKING_PROCESS_ACTION=ignore NOTIFY=silent}"
+
+bash "$HANDOFF_SCRIPT" \
+  --label "$label" \
+  --item "$item" \
+  --handoff-mode "$mode" \
+  --installomator-cmd "$INSTALLOMATOR_SCRIPT" \
+  --installomator-args "$extra_args"
+```
+
+When Installomator is uploaded as a separate Jamf script payload:
+
+Use two script payloads in one policy (or two chained policies), in this order:
+
+1. Run the Installomator payload first (using `$4` label as usual).
+2. Run the handoff payload second.
+
+Current helper behavior note:
+
+- `installomator_handoff.sh` performs strict update detection when it runs Installomator itself.
+- If Installomator is executed separately in a prior payload, the simplest reliable handoff call is `--always-handoff`.
+
+Example second payload in that case:
+
+```bash
+#!/bin/bash
+set -euo pipefail
+
+HANDOFF_SCRIPT="/usr/local/title_editor/installomator/installomator_handoff.sh"
+
+label="${4:-firefox}"
+item="${5:-$label}"
+mode="${6:-signal-only}"
+
+bash "$HANDOFF_SCRIPT" \
+  --label "$label" \
+  --item "$item" \
+  --handoff-mode "$mode" \
+  --always-handoff
+```
+
+Optional stricter pattern (shared log handoff):
+
+- Payload 1 writes Installomator output to a known file (for example `/var/tmp/installomator_<label>.log`).
+- Payload 2 consumes that same log to decide whether to run handoff.
+- This pattern is recommended when you want strict "only-on-update" behavior while keeping Installomator in a separate payload.
+
 ---
 
 ## Workflow: Title Editor with Jamf Pro Patch Management
@@ -1002,6 +1093,29 @@ bash ~/title_editor/title_editor_menu.sh \
 | `TEM_RECONNECT_TIMEOUT` | Timeout for token-refresh reconnect attempts (default 20s). |
 | `TEM_TITLE_UPDATE_TIMEOUT` | Timeout for the `currentVersion` PATCH call after patch creation (default 20s). |
 | `TEM_AUTO_RESEQUENCE_ON_CHANGE` | Set to `false` to disable automatic patch resequencing after batch operations. |
+
+---
+
+## Release Notes Update (2026-04-15, Later-Later)
+
+### Summary (2026-04-15, Later-Later)
+
+- Added `installomator/installomator_handoff.sh` to support Installomator-first handoff into `update_title_editor_versions.sh`.
+- Added README documentation for Installomator handoff usage in both local script workflows and Jamf Pro policy workflows.
+- Updated sync helper coverage so `installomator/` directory items are included in both GitHub and GitLab sync flows.
+
+### Scripts included in this update (2026-04-15, Later-Later)
+
+- `installomator/installomator_handoff.sh`
+- `sync_title_editor_github_scripts.sh`
+- `sync_title_editor_gitlab_scripts.sh`
+- `README.md`
+
+### Notes for reviewers (2026-04-15, Later-Later)
+
+- Validate `installomator/installomator_handoff.sh` runs Title Editor handoff only after Installomator update/install activity is detected.
+- Validate Jamf policy parameter mapping for `label`, `item`, and `handoff mode` in the documented example.
+- Validate both sync scripts include `installomator/` sub-items during dry-run and normal sync execution.
 
 ---
 
