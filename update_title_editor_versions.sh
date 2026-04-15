@@ -25,12 +25,16 @@ set -euo pipefail
 #
 # AutoPkg handoff examples:
 #   # 1) Current-version signal only (no import/state write)
-#   autopkg run Firefox.munki && \
-#   bash update_title_editor_versions.sh --item firefox --current-only --no-import --no-apply
+#   autopkg run Firefox.munki \
+#     --post edu.utah.marriottlibrary.general-scripts.autopkg.TitleEditorAutoPkgHandoff/TitleEditorAutoPkgHandoff \
+#     -k TITLE_EDITOR_ITEM=firefox \
+#     -k HANDOFF_MODE=signal-only
 #
 #   # 2) Trigger one new Title Editor version when source reports newer
-#   autopkg run Firefox.munki && \
-#   bash update_title_editor_versions.sh --item firefox --current-only
+#   autopkg run Firefox.munki \
+#     --post edu.utah.marriottlibrary.general-scripts.autopkg.TitleEditorAutoPkgHandoff/TitleEditorAutoPkgHandoff \
+#     -k TITLE_EDITOR_ITEM=firefox \
+#     -k HANDOFF_MODE=apply-current
 #
 # Copyright (c) 2026 University of Utah, Marriott Library IT.
 # All Rights Reserved.
@@ -213,17 +217,21 @@ Notes:
   - AutoPkg can be used as an upstream "new version detected" signal.
     Common pattern:
     1) Run an AutoPkg recipe for the app.
-    2) Run this wrapper with --item <key> --current-only.
-    3) Add --no-import --no-apply for signal-only checks.
+    2) Append the shared Title Editor processor with --post.
+    3) Pass TITLE_EDITOR_ITEM and HANDOFF_MODE with -k.
 
 AutoPkg examples:
   # Current-version signal only (no import/state write)
-  autopkg run Firefox.munki && \
-  bash update_title_editor_versions.sh --item firefox --current-only --no-import --no-apply
+  autopkg run Firefox.munki \
+    --post edu.utah.marriottlibrary.general-scripts.autopkg.TitleEditorAutoPkgHandoff/TitleEditorAutoPkgHandoff \
+    -k TITLE_EDITOR_ITEM=firefox \
+    -k HANDOFF_MODE=signal-only
 
   # Trigger one new Title Editor version when source reports newer
-  autopkg run Firefox.munki && \
-  bash update_title_editor_versions.sh --item firefox --current-only
+  autopkg run Firefox.munki \
+    --post edu.utah.marriottlibrary.general-scripts.autopkg.TitleEditorAutoPkgHandoff/TitleEditorAutoPkgHandoff \
+    -k TITLE_EDITOR_ITEM=firefox \
+    -k HANDOFF_MODE=apply-current
 EOF
 }
 

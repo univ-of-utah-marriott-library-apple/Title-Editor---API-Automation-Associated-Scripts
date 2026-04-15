@@ -599,7 +599,25 @@ bash ~/title_editor/update_title_editor_versions.sh \
 
 Use this when AutoPkg should remain the upstream "new version available" signal, while `update_title_editor_versions.sh` handles Title Editor import/state behavior.
 
-Direct handoff pattern:
+Recommended AutoPkg workflow:
+
+```bash
+# 1) Current-version signal only (no import/state write)
+autopkg run Firefox.munki \
+  --post edu.utah.marriottlibrary.general-scripts.autopkg.TitleEditorAutoPkgHandoff/TitleEditorAutoPkgHandoff \
+  -k TITLE_EDITOR_ITEM=firefox \
+  -k HANDOFF_MODE=signal-only
+
+# 2) Trigger one new Title Editor version when source reports newer
+autopkg run Firefox.munki \
+  --post edu.utah.marriottlibrary.general-scripts.autopkg.TitleEditorAutoPkgHandoff/TitleEditorAutoPkgHandoff \
+  -k TITLE_EDITOR_ITEM=firefox \
+  -k HANDOFF_MODE=apply-current
+```
+
+This is the normal AutoPkg design for ad hoc handoff behavior: run the upstream recipe directly, then append the Title Editor processor as a post-processor with `--post`. Processor inputs are supplied with `-k` in the same command.
+
+Equivalent manual handoff pattern:
 
 ```bash
 # 1) Current-version signal only (no import/state write)
@@ -611,33 +629,33 @@ autopkg run Firefox.munki && \
 bash ~/title_editor/update_title_editor_versions.sh --item firefox --current-only
 ```
 
-Reusable AutoPkg implementation (in the repository):
+Shared AutoPkg processor implementation (in the repository):
 
-- `autopkg/processors/TitleEditorAutoPkgHandoff.py`
-- `autopkg/recipes/TitleEditorAutoPkgHandoff.recipe`
+- `autopkg/TitleEditorAutoPkgHandoff.py`
+- `autopkg/TitleEditorAutoPkgHandoff.recipe`
 
-Recipe run examples:
+The stub recipe exists only to provide a shared-processor namespace in AutoPkg's search path. It is not the primary thing you run.
 
-```bash
-# 1) Current-version signal only (no import/state write)
-autopkg run /path/to/autopkg/recipes/TitleEditorAutoPkgHandoff.recipe \
-  -k SOURCE_RECIPE=Firefox.munki \
-  -k TITLE_EDITOR_ITEM=firefox \
-  -k HANDOFF_MODE=signal-only
+The shared processor is referenced by recipe identifier plus processor name:
 
-# 2) Trigger one new Title Editor version when source reports newer
-autopkg run /path/to/autopkg/recipes/TitleEditorAutoPkgHandoff.recipe \
-  -k SOURCE_RECIPE=Firefox.munki \
-  -k TITLE_EDITOR_ITEM=firefox \
-  -k HANDOFF_MODE=apply-current
+```text
+edu.utah.marriottlibrary.general-scripts.autopkg.TitleEditorAutoPkgHandoff/TitleEditorAutoPkgHandoff
 ```
+
+The stub recipe looks like this:
+
+```xml
+<key>Identifier</key>
+<string>edu.utah.marriottlibrary.general-scripts.autopkg.TitleEditorAutoPkgHandoff</string>
+```
+
+If you prefer a fixed child recipe for a specific title, you can still build one locally with `ParentRecipe` and this processor, but the default documented workflow here is `autopkg run <source recipe> --post ...`.
 
 Recipe inputs:
 
-- `SOURCE_RECIPE` (example: `Firefox.munki`)
 - `TITLE_EDITOR_ITEM` (example: `firefox`)
 - `HANDOFF_MODE` (`signal-only` or `apply-current`)
-- Optional: `AUTOPKG_RUN_ARGS`, `TITLE_EDITOR_EXTRA_ARGS`, `UPDATE_SCRIPT_PATH`, `AUTOPKG_CMD`
+- Optional: `TITLE_EDITOR_EXTRA_ARGS`, `UPDATE_SCRIPT_PATH`
 
 #### Installomator Handoff Helper
 
@@ -1123,22 +1141,22 @@ bash ~/title_editor/title_editor_menu.sh \
 
 ### Summary (2026-04-15, Later)
 
-- Added a reusable AutoPkg handoff processor to run an upstream recipe and then trigger `update_title_editor_versions.sh`.
-- Added a generic AutoPkg recipe wrapper for handoff flow reuse via `SOURCE_RECIPE`, `TITLE_EDITOR_ITEM`, and `HANDOFF_MODE`.
+- Added a shared AutoPkg handoff post-processor that runs after `autopkg run` completes and then triggers `update_title_editor_versions.sh`.
+- Added a namespace stub recipe so the handoff processor can be referenced via AutoPkg's shared processor search path.
 - Updated `update_title_editor_versions.sh` with AutoPkg handoff examples and current-only handoff guidance.
 - Sync summary for this update: Added files `2`, Updated files `1`, Unchanged files `8`, Target-only files `0`.
 
 ### Scripts included in this update (2026-04-15, Later)
 
-- `autopkg/processors/TitleEditorAutoPkgHandoff.py`
-- `autopkg/recipes/TitleEditorAutoPkgHandoff.recipe`
+- `autopkg/TitleEditorAutoPkgHandoff.py`
+- `autopkg/TitleEditorAutoPkgHandoff.recipe`
 - `update_title_editor_versions.sh`
 
 ### Notes for reviewers (2026-04-15, Later)
 
-- Validate `HANDOFF_MODE=signal-only` runs upstream AutoPkg recipe and passes `--no-import --no-apply`.
-- Validate `HANDOFF_MODE=apply-current` runs upstream AutoPkg recipe and triggers one current-only Title Editor update path.
-- Validate README examples align with the generic AutoPkg recipe usage and input keys.
+- Validate `HANDOFF_MODE=signal-only` via `autopkg run <recipe> --post ...` passes `--no-import --no-apply` after the main recipe completes.
+- Validate `HANDOFF_MODE=apply-current` via `autopkg run <recipe> --post ...` triggers one current-only Title Editor update path.
+- Validate README examples align with the shared post-processor pattern and updated input keys.
 
 ---
 

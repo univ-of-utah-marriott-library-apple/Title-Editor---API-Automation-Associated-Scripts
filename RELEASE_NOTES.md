@@ -25,5 +25,5 @@ Summary:
 - title_editor_api_ctrl.sh
 - title_editor_software_title_defaults_from_user_prompt.sh
 - update_title_editor_versions.sh
-- autopkg/processors/TitleEditorAutoPkgHandoff.py
-- autopkg/recipes/TitleEditorAutoPkgHandoff.recipe
+- autopkg/TitleEditorAutoPkgHandoff.py
+- autopkg/TitleEditorAutoPkgHandoff.recipe
