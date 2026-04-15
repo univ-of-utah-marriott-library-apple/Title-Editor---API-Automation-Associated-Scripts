@@ -7,7 +7,7 @@
   - [Installation and Setup](#installation-and-setup)
   - [Quick Start](#quick-start)
   - [Script Reference](#script-reference)
-  - [AutoPkg Handoff Workflow (Generic Recipe)](#autopkg-handoff-workflow-generic-recipe)
+  - [AutoPkg Handoff Workflow](#autopkg-handoff-workflow)
   - [Workflow: Title Editor with Jamf Pro Patch Management](#workflow-title-editor-with-jamf-pro-patch-management)
   - [Installomator: Patch Compliance for Open-Source and Common Applications](#installomator-patch-compliance-for-open-source-and-common-applications)
   - [Restricted and Campus-Only Applications](#restricted-and-campus-only-applications)
