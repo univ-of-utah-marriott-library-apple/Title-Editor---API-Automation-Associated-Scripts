@@ -65,6 +65,7 @@ Optional non-interactive flags:
   --url <release_notes_page_url>
   --mac-app-store
   --mac-app-store-name <n>
+  --mac-app-store-id <id>
   --non-interactive
   --title-name <n>
   --publisher <publisher>
@@ -83,6 +84,8 @@ Notes:
   - Fetches a release-notes web page and extracts versions from headings or table rows.
   - Also supports Jamf Patch XML sources by reading <software_version> entries.
   - Use --mac-app-store to search by app name, pick a listing, and parse App Store version history.
+  - If App Store search is unavailable, use --mac-app-store-id <id> or --bundle-id <bundle_id>
+    to fetch listing metadata via lookup.
     Bundle ID is automatically populated from the App Store listing.
   - Writes short-format batch file for Title Editor:
       title_name|version
@@ -273,6 +276,121 @@ for r in filtered:
 PY
 }
 
+lookup_mac_app_store_listing_by_id() {
+  local track_id="$1"
+  local lookup_url lookup_json
+
+  [[ -n "$track_id" ]] || return 1
+
+  lookup_url="https://itunes.apple.com/lookup?id=${track_id}&country=us"
+  if ! lookup_json=$(curl \
+  --silent \
+  --show-error \
+  --fail \
+  --location \
+  --max-time 30 \
+  --connect-timeout 10 \
+  "$lookup_url"); then
+  return 1
+  fi
+
+  python3 - "$lookup_json" <<'PY'
+import json
+import sys
+
+payload = json.loads(sys.argv[1])
+results = payload.get("results") or []
+if not results:
+    sys.exit(1)
+
+item = results[0]
+track_id = item.get("trackId")
+if not track_id:
+    sys.exit(1)
+
+name = str(item.get("trackName") or "")
+version = str(item.get("version") or "")
+release_date = str(item.get("currentVersionReleaseDate") or "")
+bundle_id = str(item.get("bundleId") or "")
+track_url = str(item.get("trackViewUrl") or f"https://apps.apple.com/us/app/id{track_id}")
+
+print("\t".join([str(track_id), name, version, release_date, bundle_id, track_url]))
+PY
+}
+
+lookup_mac_app_store_listing_by_bundle_id() {
+  local app_bundle_id="$1"
+  local lookup_url lookup_json
+
+  [[ -n "$app_bundle_id" ]] || return 1
+
+  lookup_url="https://itunes.apple.com/lookup?bundleId=${app_bundle_id}&country=us"
+  if ! lookup_json=$(curl \
+  --silent \
+  --show-error \
+  --fail \
+  --location \
+  --max-time 30 \
+  --connect-timeout 10 \
+  "$lookup_url"); then
+  return 1
+  fi
+
+  python3 - "$lookup_json" <<'PY'
+import json
+import sys
+
+payload = json.loads(sys.argv[1])
+results = payload.get("results") or []
+if not results:
+    sys.exit(1)
+
+item = results[0]
+track_id = item.get("trackId")
+if not track_id:
+    sys.exit(1)
+
+name = str(item.get("trackName") or "")
+version = str(item.get("version") or "")
+release_date = str(item.get("currentVersionReleaseDate") or "")
+bundle_id = str(item.get("bundleId") or "")
+track_url = str(item.get("trackViewUrl") or f"https://apps.apple.com/us/app/id{track_id}")
+
+print("\t".join([str(track_id), name, version, release_date, bundle_id, track_url]))
+PY
+}
+
+fallback_bundle_id_for_app_name() {
+  local app_name="$1"
+  local normalized
+
+  normalized=$(echo "$app_name" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9]+//g')
+
+  case "$normalized" in
+    logicpro)
+      echo "com.apple.logic10"
+      ;;
+    motion)
+      echo "com.apple.motionapp"
+      ;;
+    finalcutpro)
+      echo "com.apple.FinalCut"
+      ;;
+    compressor)
+      echo "com.apple.Compressor"
+      ;;
+    garageband)
+      echo "com.apple.garageband10"
+      ;;
+    xcode)
+      echo "com.apple.dt.Xcode"
+      ;;
+    *)
+      echo ""
+      ;;
+  esac
+}
+
 select_mac_app_store_listing() {
   local app_name="$1"
   local -a listings=()
@@ -293,9 +411,9 @@ select_mac_app_store_listing() {
   done
 
   if [[ "${#listings[@]}" -eq 1 ]]; then
-    IFS=$'\t' read -r _track_id name _version _release_date _bundle_id track_url <<< "${listings[0]}"
+    IFS=$'\t' read -r track_id name version release_date bundle_id track_url <<< "${listings[0]}"
     echo -e "${BLUE}[INFO]${NC} Only one listing found; using: ${name}" >&2
-    printf '%s\t%s' "$track_url" "$name"
+    printf '%s\t%s\t%s\t%s\t%s\t%s' "$track_id" "$name" "$version" "$release_date" "$bundle_id" "$track_url"
     return 0
   fi
 
@@ -305,8 +423,8 @@ select_mac_app_store_listing() {
 
     if [[ "$idx" =~ ^[0-9]+$ ]] && (( idx >= 1 && idx <= ${#listings[@]} )); then
       row="${listings[$((idx-1))]}"
-      IFS=$'\t' read -r _track_id name _version _release_date _bundle_id track_url <<< "$row"
-      printf '%s\t%s' "$track_url" "$name"
+      IFS=$'\t' read -r track_id name version release_date bundle_id track_url <<< "$row"
+      printf '%s\t%s\t%s\t%s\t%s\t%s' "$track_id" "$name" "$version" "$release_date" "$bundle_id" "$track_url"
       return 0
     fi
 
@@ -978,6 +1096,7 @@ main() {
   local limit="all"
   local mac_app_store_mode=false
   local mac_app_store_name=""
+  local mac_app_store_id=""
   local non_interactive=false
 
   while [[ $# -gt 0 ]]; do
@@ -992,6 +1111,11 @@ main() {
         ;;
       --mac-app-store-name)
         mac_app_store_name="${2:-}"
+        mac_app_store_mode=true
+        shift 2
+        ;;
+      --mac-app-store-id)
+        mac_app_store_id="${2:-}"
         mac_app_store_mode=true
         shift 2
         ;;
@@ -1077,28 +1201,57 @@ main() {
   fi
 
   if [[ "$mac_app_store_mode" == "true" ]]; then
+    local app_store_selection=""
+    local selected_listing_name=""
+    local selected_bundle_id=""
+    local selected_track_url=""
+
+    if [[ -n "$mac_app_store_id" ]]; then
+      log_info "Looking up Mac App Store app by ID: ${mac_app_store_id}"
+      if ! app_store_selection=$(lookup_mac_app_store_listing_by_id "$mac_app_store_id"); then
+        log_error "Failed to fetch Mac App Store listing for ID: ${mac_app_store_id}"
+        exit 1
+      fi
+    else
     if [[ -z "$mac_app_store_name" ]]; then
       mac_app_store_name=$(prompt_required "Mac App Store app name: ")
     fi
 
     log_info "Searching Mac App Store for: ${mac_app_store_name}"
-    local app_store_selection selected_listing_name
     if ! app_store_selection=$(select_mac_app_store_listing "$mac_app_store_name"); then
-      log_error "Failed to find a Mac App Store app for: ${mac_app_store_name}"
-      exit 1
+      local fallback_bundle_id=""
+      if [[ -n "$bundle_id" ]]; then
+        fallback_bundle_id="$bundle_id"
+        log_warn "Mac App Store search unavailable; trying bundle ID lookup: ${fallback_bundle_id}"
+      else
+        fallback_bundle_id=$(fallback_bundle_id_for_app_name "$mac_app_store_name")
+        if [[ -n "$fallback_bundle_id" ]]; then
+          log_warn "Mac App Store search unavailable; trying known bundle ID fallback: ${fallback_bundle_id}"
+        fi
+      fi
+
+      if [[ -n "$fallback_bundle_id" ]]; then
+        if ! app_store_selection=$(lookup_mac_app_store_listing_by_bundle_id "$fallback_bundle_id"); then
+          log_error "Failed to find a Mac App Store app for: ${mac_app_store_name}"
+          log_error "Tried search endpoint and bundle-id fallback (${fallback_bundle_id})."
+          exit 1
+        fi
+      else
+        log_error "Failed to find a Mac App Store app for: ${mac_app_store_name}"
+        log_error "Try --mac-app-store-id <id> or --bundle-id <bundle_id> as a fallback."
+        exit 1
+      fi
+    fi
     fi
 
-    IFS=$'\t' read -r url selected_listing_name <<< "$app_store_selection"
+    IFS=$'\t' read -r _selected_track_id selected_listing_name _selected_version _selected_release_date selected_bundle_id selected_track_url <<< "$app_store_selection"
+    url="$selected_track_url"
 
-    # Extract bundle_id from App Store listing if not already set
-    if [[ -z "$bundle_id" ]]; then
-      local _meta_line _track_id _name _version _release_date _track_url
-      # Search again to get the structured listing data including bundle_id
-      _meta_line=$(search_mac_app_store_listings "$selected_listing_name" | head -1 || true)
-      if [[ -n "$_meta_line" ]]; then
-        IFS=$'\t' read -r _track_id _name _version _release_date bundle_id _track_url <<< "$_meta_line"
-        [[ -n "$bundle_id" ]] && log_info "Bundle ID from App Store: ${bundle_id}"
-      fi
+    [[ -z "$selected_listing_name" ]] && selected_listing_name="$mac_app_store_name"
+    [[ -n "$selected_bundle_id" ]] && bundle_id="$selected_bundle_id"
+
+    if [[ -n "$bundle_id" ]]; then
+      log_info "Bundle ID from App Store: ${bundle_id}"
     fi
 
     log_info "Using App Store URL: ${url}"

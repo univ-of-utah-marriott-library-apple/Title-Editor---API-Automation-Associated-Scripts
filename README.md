@@ -542,7 +542,16 @@ bash ~/title_editor/build_title_editor_batch_from_release_notes.sh \
   --mac-app-store-name "Final Cut Pro" \
   --title-name "Final Cut Pro" \
   --output ~/title_editor/batches/finalcutpro.txt
+
+# Fallback mode when App Store name search is unavailable
+bash ~/title_editor/build_title_editor_batch_from_release_notes.sh \
+  --mac-app-store \
+  --mac-app-store-id 424389933 \
+  --title-name "Final Cut Pro" \
+  --output ~/title_editor/batches/finalcutpro.txt
 ```
+
+If App Store search by name fails in your environment, use `--mac-app-store-id <id>` or provide `--bundle-id <bundle_id>` so lookup can continue without search.
 
 Use `--debug` for verbose HTML parsing output when a vendor changes page layout and version extraction breaks.
 
@@ -594,6 +603,7 @@ bash ~/title_editor/update_title_editor_versions.sh \
 - Supports one-item or all-item runs.
 - Maintains per-item/version state keys.
 - Integrates with existing batch builder scripts and Title Editor import flow.
+- Mac App Store items can use fixed App Store IDs to avoid dependence on name-search endpoint availability.
 
 #### AutoPkg Handoff Workflow
 

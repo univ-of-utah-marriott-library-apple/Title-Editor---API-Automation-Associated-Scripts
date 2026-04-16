@@ -247,6 +247,7 @@ configure_item() {
   SOURCE_URL_FALLBACK=""
   SOURCE_VERSION_REGEX=""
   MAC_APP_STORE_NAME=""
+  MAC_APP_STORE_ID=""
   JAMF_PATCH_TITLE_ID=""
   JAMF_PATCH_SOFTWARE_NAME=""
   JAMF_PATCH_SOURCE_MODE="${JAMF_PATCH_SOURCE_MODE:-jamf-pro}"
@@ -288,6 +289,7 @@ configure_item() {
       TITLE_NAME="Compressor"
       VERSION_METHOD="MAC_APP_STORE"
       MAC_APP_STORE_NAME="Compressor"
+      MAC_APP_STORE_ID="424390742"
       ;;
 
     download-shuttle)
@@ -326,6 +328,7 @@ configure_item() {
       TITLE_NAME="Final Cut Pro"
       VERSION_METHOD="MAC_APP_STORE"
       MAC_APP_STORE_NAME="Final Cut Pro"
+      MAC_APP_STORE_ID="424389933"
       ;;
 
     firefox)
@@ -418,6 +421,7 @@ configure_item() {
       TITLE_NAME="Logic Pro"
       VERSION_METHOD="MAC_APP_STORE"
       MAC_APP_STORE_NAME="Logic Pro"
+      MAC_APP_STORE_ID="634148309"
       ;;
 
     motion)
@@ -425,6 +429,7 @@ configure_item() {
       TITLE_NAME="Motion"
       VERSION_METHOD="MAC_APP_STORE"
       MAC_APP_STORE_NAME="Motion"
+      MAC_APP_STORE_ID="434290957"
       ;;
 
     opera)
@@ -477,6 +482,7 @@ configure_item() {
       TITLE_NAME="Xcode"
       VERSION_METHOD="MAC_APP_STORE"
       MAC_APP_STORE_NAME="Xcode"
+      MAC_APP_STORE_ID="497799835"
       ;;
 
     # Example for release notes mode:
@@ -493,6 +499,7 @@ configure_item() {
     #   TITLE_NAME="My MAS App"
     #   VERSION_METHOD="MAC_APP_STORE"
     #   MAC_APP_STORE_NAME="My MAS App"
+    #   MAC_APP_STORE_ID="123456789"
     #   ;;
 
     *)
@@ -578,11 +585,16 @@ run_batch_builder() {
         bash "$RELEASE_NOTES_BATCH_SCRIPT"
         --non-interactive
         --mac-app-store
-        --mac-app-store-name "$MAC_APP_STORE_NAME"
         --title-name "$TITLE_NAME"
         --output "$output_file"
         --limit "$LIMIT"
       )
+
+      if [[ -n "$MAC_APP_STORE_ID" ]]; then
+        cmd+=(--mac-app-store-id "$MAC_APP_STORE_ID")
+      else
+        cmd+=(--mac-app-store-name "$MAC_APP_STORE_NAME")
+      fi
 
       [[ "$DEBUG" -eq 1 ]] && cmd+=(--debug)
 
