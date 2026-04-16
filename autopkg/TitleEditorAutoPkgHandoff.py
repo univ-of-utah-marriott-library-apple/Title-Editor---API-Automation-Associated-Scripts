@@ -2,6 +2,7 @@
 """AutoPkg processor to hand off an already-run recipe to Title Editor updates."""
 
 import os
+import re
 import shlex
 import subprocess
 
@@ -19,8 +20,11 @@ class TitleEditorAutoPkgHandoff(Processor):
 
     input_variables = {
         "TITLE_EDITOR_ITEM": {
-            "required": True,
-            "description": "Item key for update_title_editor_versions.sh (for example firefox).",
+            "required": False,
+            "description": (
+                "Item key for update_title_editor_versions.sh (for example firefox). "
+                "If omitted, defaults to a normalized form of upstream NAME."
+            ),
         },
         "HANDOFF_MODE": {
             "required": False,
@@ -70,11 +74,30 @@ class TitleEditorAutoPkgHandoff(Processor):
         except subprocess.CalledProcessError as err:
             raise ProcessorError("{} failed with exit code {}".format(label, err.returncode))
 
-    def main(self):
-        title_editor_item = self.env["TITLE_EDITOR_ITEM"].strip()
+    def _normalize_item_key(self, value):
+        normalized = re.sub(r"[^a-z0-9]+", "-", value.strip().lower())
+        return normalized.strip("-")
 
-        if not title_editor_item:
-            raise ProcessorError("TITLE_EDITOR_ITEM is required.")
+    def _resolve_title_editor_item(self):
+        configured = self.env.get("TITLE_EDITOR_ITEM", "").strip()
+        if configured:
+            return configured
+
+        upstream_name = self.env.get("NAME", "").strip()
+        if upstream_name:
+            derived = self._normalize_item_key(upstream_name)
+            if derived:
+                self.output(
+                    "TITLE_EDITOR_ITEM not provided; derived '{}' from upstream NAME='{}'.".format(
+                        derived, upstream_name
+                    )
+                )
+                return derived
+
+        raise ProcessorError("TITLE_EDITOR_ITEM is required (or provide upstream NAME).")
+
+    def main(self):
+        title_editor_item = self._resolve_title_editor_item()
 
         handoff_mode = self.env.get("HANDOFF_MODE", "signal-only").strip().lower()
         if handoff_mode not in ("signal-only", "apply-current"):

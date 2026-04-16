@@ -26,13 +26,13 @@ set -euo pipefail
 # AutoPkg handoff examples:
 #   # 1) Current-version signal only (no import/state write)
 #   autopkg run Firefox.munki \
-#     --post edu.utah.marriottlibrary.general-scripts.autopkg.TitleEditorAutoPkgHandoff/TitleEditorAutoPkgHandoff \
+#     --post edu.utah.marriottlibrary.autopkg.TitleEditorAutoPkgHandoff/TitleEditorAutoPkgHandoff \
 #     -k TITLE_EDITOR_ITEM=firefox \
 #     -k HANDOFF_MODE=signal-only
 #
 #   # 2) Trigger one new Title Editor version when source reports newer
 #   autopkg run Firefox.munki \
-#     --post edu.utah.marriottlibrary.general-scripts.autopkg.TitleEditorAutoPkgHandoff/TitleEditorAutoPkgHandoff \
+#     --post edu.utah.marriottlibrary.autopkg.TitleEditorAutoPkgHandoff/TitleEditorAutoPkgHandoff \
 #     -k TITLE_EDITOR_ITEM=firefox \
 #     -k HANDOFF_MODE=apply-current
 #
@@ -223,13 +223,13 @@ Notes:
 AutoPkg examples:
   # Current-version signal only (no import/state write)
   autopkg run Firefox.munki \
-    --post edu.utah.marriottlibrary.general-scripts.autopkg.TitleEditorAutoPkgHandoff/TitleEditorAutoPkgHandoff \
+    --post edu.utah.marriottlibrary.autopkg.TitleEditorAutoPkgHandoff/TitleEditorAutoPkgHandoff \
     -k TITLE_EDITOR_ITEM=firefox \
     -k HANDOFF_MODE=signal-only
 
   # Trigger one new Title Editor version when source reports newer
   autopkg run Firefox.munki \
-    --post edu.utah.marriottlibrary.general-scripts.autopkg.TitleEditorAutoPkgHandoff/TitleEditorAutoPkgHandoff \
+    --post edu.utah.marriottlibrary.autopkg.TitleEditorAutoPkgHandoff/TitleEditorAutoPkgHandoff \
     -k TITLE_EDITOR_ITEM=firefox \
     -k HANDOFF_MODE=apply-current
 EOF

@@ -3,10 +3,10 @@
 <plist version="1.0">
 <dict>
   <key>Description</key>
-  <string>Namespace stub for the shared TitleEditorAutoPkgHandoff processor. Add this repo to AutoPkg, then use edu.utah.marriottlibrary.general-scripts.autopkg.TitleEditorAutoPkgHandoff/TitleEditorAutoPkgHandoff with autopkg run --post.</string>
+  <string>Namespace stub for the shared TitleEditorAutoPkgHandoff processor. Add this repo to AutoPkg, then use edu.utah.marriottlibrary.autopkg.TitleEditorAutoPkgHandoff/TitleEditorAutoPkgHandoff with autopkg run --post.</string>
 
   <key>Identifier</key>
-  <string>edu.utah.marriottlibrary.general-scripts.autopkg.TitleEditorAutoPkgHandoff</string>
+  <string>edu.utah.marriottlibrary.autopkg.TitleEditorAutoPkgHandoff</string>
 
   <key>MinimumVersion</key>
   <string>2.3</string>

@@ -604,18 +604,20 @@ Recommended AutoPkg workflow:
 ```bash
 # 1) Current-version signal only (no import/state write)
 autopkg run Firefox.munki \
-  --post edu.utah.marriottlibrary.general-scripts.autopkg.TitleEditorAutoPkgHandoff/TitleEditorAutoPkgHandoff \
+  --post edu.utah.marriottlibrary.autopkg.TitleEditorAutoPkgHandoff/TitleEditorAutoPkgHandoff \
   -k TITLE_EDITOR_ITEM=firefox \
   -k HANDOFF_MODE=signal-only
 
 # 2) Trigger one new Title Editor version when source reports newer
 autopkg run Firefox.munki \
-  --post edu.utah.marriottlibrary.general-scripts.autopkg.TitleEditorAutoPkgHandoff/TitleEditorAutoPkgHandoff \
+  --post edu.utah.marriottlibrary.autopkg.TitleEditorAutoPkgHandoff/TitleEditorAutoPkgHandoff \
   -k TITLE_EDITOR_ITEM=firefox \
   -k HANDOFF_MODE=apply-current
 ```
 
 This is the normal AutoPkg design for ad hoc handoff behavior: run the upstream recipe directly, then append the Title Editor processor as a post-processor with `--post`. Processor inputs are supplied with `-k` in the same command.
+
+If `TITLE_EDITOR_ITEM` is omitted, the processor will default it from the upstream AutoPkg `NAME` value by normalizing to a lowercase, hyphenated key (for example `Mozilla Firefox` -> `mozilla-firefox`).
 
 Equivalent manual handoff pattern:
 
@@ -639,21 +641,21 @@ The stub recipe exists only to provide a shared-processor namespace in AutoPkg's
 The shared processor is referenced by recipe identifier plus processor name:
 
 ```text
-edu.utah.marriottlibrary.general-scripts.autopkg.TitleEditorAutoPkgHandoff/TitleEditorAutoPkgHandoff
+edu.utah.marriottlibrary.autopkg.TitleEditorAutoPkgHandoff/TitleEditorAutoPkgHandoff
 ```
 
 The stub recipe looks like this:
 
 ```xml
 <key>Identifier</key>
-<string>edu.utah.marriottlibrary.general-scripts.autopkg.TitleEditorAutoPkgHandoff</string>
+<string>edu.utah.marriottlibrary.autopkg.TitleEditorAutoPkgHandoff</string>
 ```
 
 If you prefer a fixed child recipe for a specific title, you can still build one locally with `ParentRecipe` and this processor, but the default documented workflow here is `autopkg run <source recipe> --post ...`.
 
 Recipe inputs:
 
-- `TITLE_EDITOR_ITEM` (example: `firefox`)
+- `TITLE_EDITOR_ITEM` (optional, example: `firefox`; defaults from upstream `NAME` when omitted)
 - `HANDOFF_MODE` (`signal-only` or `apply-current`)
 - Optional: `TITLE_EDITOR_EXTRA_ARGS`, `UPDATE_SCRIPT_PATH`
 
