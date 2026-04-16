@@ -8,7 +8,7 @@
   - [Quick Start](#quick-start)
   - [Script Reference](#script-reference)
   - [AutoPkg Handoff Workflow](#autopkg-handoff-workflow)
-  - [Installomator Handoff Helper](#installomator-handoff-helper)
+  - [Installomator Handoff Workflow](#installomator-handoff-workflow)
   - [Workflow: Title Editor with Jamf Pro Patch Management](#workflow-title-editor-with-jamf-pro-patch-management)
   - [Installomator: Patch Compliance for Open-Source and Common Applications](#installomator-patch-compliance-for-open-source-and-common-applications)
   - [Restricted and Campus-Only Applications](#restricted-and-campus-only-applications)
@@ -659,7 +659,7 @@ Recipe inputs:
 - `HANDOFF_MODE` (`signal-only` or `apply-current`)
 - Optional: `TITLE_EDITOR_EXTRA_ARGS`, `UPDATE_SCRIPT_PATH`
 
-#### Installomator Handoff Helper
+#### Installomator Handoff Workflow
 
 Use `installomator/installomator_handoff.sh` when Installomator is your upstream installer/update action and you want Title Editor to update only when Installomator indicates a real install/update occurred.
 
