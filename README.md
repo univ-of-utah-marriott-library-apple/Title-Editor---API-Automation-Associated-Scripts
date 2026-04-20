@@ -573,6 +573,12 @@ bash ~/title_editor/build_title_editor_batch_from_jamf_patch_catalog.sh \
 - Supports credential sourcing from environment and/or Keychain.
 - Helpful for applications installed under subdirectories (for example `/Applications/Web Browsers`).
 
+Nice-to-know testing source:
+
+- The App Catalog endpoint `https://<your-id>.appcatalog.jamfcloud.com/test/software` can return titles/versions that are not yet enabled, which is useful for testing parser behavior and batch generation.
+- You can point this script at that endpoint with `--source public --catalog-url "https://<your-id>.appcatalog.jamfcloud.com/test/software"`.
+- Prefer `--source jamf-pro` for production-aligned results, because it reflects the patch titles and visibility currently available in your Jamf Pro tenant.
+
 ---
 
 ### `title_editor_software_title_defaults_from_user_prompt.sh`
