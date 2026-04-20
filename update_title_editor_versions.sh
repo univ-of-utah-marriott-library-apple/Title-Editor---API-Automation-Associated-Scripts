@@ -97,6 +97,13 @@ run_cmd_with_output_control() {
     return 0
   fi
 
+  # Allow callers to handle first-attempt failures (for example, fallback flows)
+  # without printing a generic warning before retry logic runs.
+  if [[ "${SUPPRESS_CMD_FAILURE_WARNINGS:-0}" == "1" ]]; then
+    rm -f "$tmp_out" >/dev/null 2>&1 || true
+    return 1
+  fi
+
   if [[ "$DEBUG" -eq 1 ]]; then
     warn "${label} failed. Showing recent output:"
     tail -n 40 "$tmp_out" >&2 || true
@@ -857,7 +864,12 @@ process_item() {
   vlog "Current key: ${CURRENT_VERSION_KEY}"
   vlog "Current version: ${current_version:-<none>}"
 
-  if ! run_batch_builder "$output_file"; then
+  local suppress_primary_warn=0
+  if [[ "$VERSION_METHOD" == "RELEASE_NOTES" && -n "$SOURCE_URL_FALLBACK" ]]; then
+    suppress_primary_warn=1
+  fi
+
+  if ! SUPPRESS_CMD_FAILURE_WARNINGS="$suppress_primary_warn" run_batch_builder "$output_file"; then
     if [[ "$VERSION_METHOD" == "RELEASE_NOTES" && -n "$SOURCE_URL_FALLBACK" ]]; then
       local primary_url="$SOURCE_URL"
       warn "Primary release-notes source failed for '${ITEM}'. Retrying fallback URL: ${SOURCE_URL_FALLBACK}"
