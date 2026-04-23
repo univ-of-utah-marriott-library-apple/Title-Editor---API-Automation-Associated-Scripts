@@ -5,8 +5,8 @@ set -euo pipefail
 #
 # A flexible, scheduler-friendly wrapper to automate Title Editor patch batch updates from various sources.
 #
-# Revised Date: 2026.03.30
-# Version: 1.2.29
+# Revised Date: 2026.04.22
+# Version: 1.2.30
 #
 # Scheduler-friendly wrapper that:
 # 1) Builds a Title Editor patch batch file using existing scripts
@@ -97,16 +97,19 @@ run_cmd_with_output_control() {
     return 0
   fi
 
-  # Allow callers to handle first-attempt failures (for example, fallback flows)
-  # without printing a generic warning before retry logic runs.
-  if [[ "${SUPPRESS_CMD_FAILURE_WARNINGS:-0}" == "1" ]]; then
-    rm -f "$tmp_out" >/dev/null 2>&1 || true
-    return 1
-  fi
-
   if [[ "$DEBUG" -eq 1 ]]; then
     warn "${label} failed. Showing recent output:"
     tail -n 40 "$tmp_out" >&2 || true
+  elif [[ "$label" == "Jamf Patch batch build" ]]; then
+    # Non-debug runs should still expose the key Jamf failure reason.
+    local jamf_error_line
+    jamf_error_line="$(grep -E '\[ERROR\]|ERROR:' "$tmp_out" | tail -n 1 || true)"
+    jamf_error_line="$(printf '%s' "$jamf_error_line" | sed $'s/\x1B\\[[0-9;]*[A-Za-z]//g')"
+    if [[ -n "$jamf_error_line" ]]; then
+      warn "${label} failed: ${jamf_error_line}"
+    else
+      warn "${label} failed. Re-run with --debug for full details."
+    fi
   else
     warn "${label} failed. Re-run with --debug for details."
   fi
@@ -864,12 +867,7 @@ process_item() {
   vlog "Current key: ${CURRENT_VERSION_KEY}"
   vlog "Current version: ${current_version:-<none>}"
 
-  local suppress_primary_warn=0
-  if [[ "$VERSION_METHOD" == "RELEASE_NOTES" && -n "$SOURCE_URL_FALLBACK" ]]; then
-    suppress_primary_warn=1
-  fi
-
-  if ! SUPPRESS_CMD_FAILURE_WARNINGS="$suppress_primary_warn" run_batch_builder "$output_file"; then
+  if ! run_batch_builder "$output_file"; then
     if [[ "$VERSION_METHOD" == "RELEASE_NOTES" && -n "$SOURCE_URL_FALLBACK" ]]; then
       local primary_url="$SOURCE_URL"
       warn "Primary release-notes source failed for '${ITEM}'. Retrying fallback URL: ${SOURCE_URL_FALLBACK}"
