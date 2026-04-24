@@ -766,6 +766,31 @@ if not versions:
           seen_versions.add(version)
           versions.append(version)
 
+    # Eclipse Packages fallback:
+    # Eclipse pages often expose release trains as "YYYY-MM R" rather than "4.xx".
+    # Convert train versions to Eclipse platform versions, anchored at:
+    #   2026-03 R -> 4.39
+    if not versions and re.search(r'(?i)\beclipse\b', raw_original):
+      train_pattern = re.compile(r'\b(20\d{2})-(03|06|09|12)\s+R\b')
+      seen_trains = set()
+      for match in train_pattern.finditer(raw_original):
+        year = int(match.group(1))
+        month = int(match.group(2))
+        train_key = (year, month)
+        if train_key in seen_trains:
+          continue
+        seen_trains.add(train_key)
+
+        quarter_offset = ((year - 2026) * 4) + ((month - 3) // 3)
+        minor = 39 + quarter_offset
+        if minor <= 0:
+          continue
+
+        version = f"4.{minor}"
+        if version not in seen_versions:
+          seen_versions.add(version)
+          versions.append(version)
+
 
 # Infer title from most frequent product in version headings.
 inferred_title = ""
